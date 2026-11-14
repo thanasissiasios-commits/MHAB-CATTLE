@@ -67,6 +67,17 @@ h4{margin:0 0 8px;font-size:14px}
 .hide{display:none!important}
 .note{font-size:12px;color:var(--mute)}
 svg text{fill:var(--mute);font-size:11px}
+#wcards{display:none}
+@media (max-width:760px){.tw{display:none}#wcards{display:block}}
+.wc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--bg)}
+.wc .top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wc .wt{font-size:18px;font-weight:650;font-variant-numeric:tabular-nums}
+.wc .adg{display:flex;align-items:baseline;gap:8px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);flex-wrap:wrap}
+.wc .adg b{font-size:22px;font-variant-numeric:tabular-nums}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:4px 6px 4px 10px;font-family:ui-monospace,monospace;font-size:13px}
+.chip button{border:0;background:none;padding:0 4px;color:var(--mute);font-size:15px;line-height:1}
+.chip.hit{border-color:var(--acc);background:var(--acc2)}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 14px;border-radius:9px;font-size:14px;z-index:20}
 </style>
 </head>
@@ -99,6 +110,7 @@ svg text{fill:var(--mute);font-size:11px}
       <button class="sm" id="btnRestore">Εισαγωγή αντιγράφου</button>
       <input type="file" id="fileRestore" accept=".json,application/json" class="hide">
     </div>
+    <input id="tagSearch" placeholder="🔍 Αναζήτηση ενωτίου σε όλες τις παρτίδες…" style="margin:8px 0">
     <div id="lots" class="lots"></div>
   </section>
 
@@ -114,13 +126,31 @@ svg text{fill:var(--mute);font-size:11px}
       </div>
     </div>
     <div class="kpis" id="kpis"></div>
+    <div class="card" id="rangeCard">
+      <h4>📐 ΜΗΑΒ επιλεγμένου διαστήματος</h4>
+      <div class="grid">
+        <div><label>Από ζύγιση</label><select id="rFrom"></select></div>
+        <div><label>Έως ζύγιση</label><select id="rTo"></select></div>
+      </div>
+      <div id="rOut" style="margin-top:10px"></div>
+    </div>
     <div class="card">
       <div class="row" style="margin-bottom:8px">
         <h4 class="sp" style="margin:0">Ζυγίσεις</h4>
         <button class="pri sm" id="btnAddW">+ Προσθήκη ζύγισης</button>
       </div>
       <div class="tw"><table id="tbl"></table></div>
+      <div id="wcards"></div>
       <p class="note">ΜΗΑΒ = (Μέσο βάρος τέλους − Μέσο βάρος αρχής) ÷ ημέρες. Υπολογίζεται αυτόματα ανά διάστημα, από την άφιξη και από τη φόρτωση.</p>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <h4 class="sp" style="margin:0">🏷️ Ενώτια <span class="meta" id="tagCount" style="font-weight:400"></span></h4>
+        <button class="sm" id="btnCopyTags">Αντιγραφή</button>
+        <button class="pri sm" id="btnAddTags">+ Προσθήκη</button>
+      </div>
+      <input id="tagFilter" placeholder="🔍 Αναζήτηση ενωτίου στην παρτίδα…" style="margin-bottom:8px">
+      <div id="tagList"></div>
     </div>
     <div class="card">
       <h4>Καμπύλη βάρους</h4>
@@ -208,6 +238,14 @@ svg text{fill:var(--mute);font-size:11px}
     <div><label>Όνομα</label><input name="name" placeholder="π.χ. Γιώργος"></div>
     <div style="grid-column:1/-1" class="row"><span class="sp"></span><button type="button" data-close>Κλείσιμο</button><button class="pri" type="submit">+ Προσθήκη</button></div>
   </form>
+</div></div>
+
+<div class="modal hide" id="mTags"><div class="box">
+  <h2 style="margin-bottom:6px">🏷️ Προσθήκη ενωτίων</h2>
+  <p class="note">Γράψε ή επικόλλησε τους αριθμούς, ένα ενώτιο σε κάθε γραμμή (ή χωρισμένα με κόμμα). Τα κενά μέσα στον αριθμό αγνοούνται. Οι διπλές καταχωρήσεις παραλείπονται αυτόματα.</p>
+  <textarea id="tagInput" rows="8" placeholder="FR 4512345678&#10;FR 4512345679&#10;…" style="font-family:ui-monospace,monospace"></textarea>
+  <p class="note" id="tagPrev"></p>
+  <div class="row"><span class="sp"></span><button type="button" data-close>Άκυρο</button><button class="pri" id="btnSaveTags">Προσθήκη</button></div>
 </div></div>
 
 <div class="modal hide" id="mConfirm"><div class="box">
@@ -307,8 +345,11 @@ function render(){
 function renderList(){
   const el=$("#lots");
   if(!lots.length){el.innerHTML='<div class="card empty" style="grid-column:1/-1">Δεν υπάρχουν παρτίδες ακόμα.<br>Πάτα «+ Νέα παρτίδα» για να ξεκινήσεις.</div>';return;}
-  const ls=lots.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const tq=normTag($("#tagSearch").value||"");
+  let ls=lots.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(tq){ls=ls.filter(l=>(l.tags||[]).some(t=>t.includes(tq)));if(!ls.length){el.innerHTML='<div class="card empty" style="grid-column:1/-1">Το ενώτιο δεν βρέθηκε σε καμία παρτίδα.</div>';return}}
   el.innerHTML=ls.map(l=>{
+    const hits=tq?(l.tags||[]).filter(t=>t.includes(tq)):[];
     const c=calc(l);
     const main=c.adgFarm!=null?`<div class="big ${cls(c.adgFarm)}">${g(c.adgFarm)}<span class="meta" style="font-weight:400"> /ημέρα</span></div><div class="meta">ΜΗΑΒ από άφιξη · ${c.dFarm} ημ.</div>`
       :`<div class="meta">${c.ws.length?c.ws.length+" καταχωρήσεις":"Χωρίς ζυγίσεις"}</div>`;
@@ -318,6 +359,8 @@ function renderList(){
       <div style="margin-top:8px">${main}</div>
       ${c.fcrCum!=null?`<div class="meta">FCR: <b>${nf(c.fcrCum,2)}</b> kg ζωοτρ./kg αύξησης</div>`:""}
       ${c.last?`<div class="meta">Τελ. βάρος: <b>${nf(c.last.weight)} kg</b> (${fd(c.last.date)})</div>`:""}
+      ${(l.tags||[]).length?`<div class="meta">🏷️ ${l.tags.length} ενώτια</div>`:""}
+      ${hits.length?`<div class="chips" style="margin-top:6px">${hits.slice(0,6).map(t=>`<span class="chip hit">${esc(fmtTag(t))}</span>`).join("")}</div>`:""}
     </div>`;
   }).join("");
 }
@@ -339,6 +382,8 @@ function renderLot(){
     kpi("FCR τελ. διαστήματος",c.fcrLast!=null?nf(c.fcrLast,2):"—",c.intakeLast!=null?`${nf(c.intakeLast,2)} kg/ζώο/ημ.`:""),
     kpi("Μέση κατανάλωση",c.intakeAvg!=null?nf(c.intakeAvg,2)+" kg":"—",c.intakeAvg!=null?`ανά ζώο/ημέρα · σύνολο ${nf(c.feedHead,0)} kg/ζώο`:""),
   ].join("");
+  renderRange(l,c);
+  renderTags(l);
   const t=$("#tbl");
   if(!c.rows.length){t.innerHTML='<tr><td class="empty" colspan="11">Πρόσθεσε πρώτα τη ζύγιση φόρτωσης στη Γαλλία.</td></tr>';}
   else{
@@ -362,8 +407,80 @@ function renderLot(){
       </tr>`;
     }).join("")+"</tbody>";
   }
+  let m=0;
+  $("#wcards").innerHTML=c.rows.slice().reverse().map(r=>{
+    const w=r.w;
+    const idx=c.rows.filter(x=>x.w.type==="w"&&x.w.date<=w.date).length;
+    const lab=w.type==="w"?`${idx}η ζύγιση`:TYPES[w.type];
+    const tc=w.type==="load"?"tag load":w.type==="arr"?"tag arr":"tag";
+    let adg="";
+    if(w.type==="arr"&&r.gain!=null)adg=`<div class="adg"><span class="meta">Απώλεια μεταφοράς</span><b class="neg">${sgn(r.gain)} kg</b><span class="meta">${sgn(r.gain/r.prev.weight*100)}% · ${r.days} ημ.</span></div>`;
+    else if(r.adg!=null)adg=`<div class="adg"><span class="meta">ΜΗΑΒ/ζώο</span><b class="${cls(r.adg)}">${g(r.adg)}</b><span class="meta">/ημέρα · ${sgn(r.gain)} kg σε ${r.days} ημ.</span></div>
+      <div class="meta">${r.adgArr!=null&&r.prev.type!=="arr"?`Από άφιξη: <b class="${cls(r.adgArr)}">${g(r.adgArr)}</b> · `:""}Από φόρτωση: <b>${g(r.adgLoad)}</b>${r.fcr!=null?` · FCR <b>${nf(r.fcr,2)}</b> (${nf(r.intake,2)} kg/ζ/ημ)`:""}</div>`;
+    return`<div class="wc"><div class="top"><span class="${tc}">${lab}</span><span class="meta">${fd(w.date)}${w.heads?` · ${w.heads} ζώα`:""}</span><span class="sp"></span><span class="wt">${nf(w.weight)} kg</span><button class="sm" data-ew="${esc(w.id)}">✎</button></div>
+      ${w.net?`<div class="meta">Καθαρό ${nf(w.net,0)} kg${w.gross!=null?` (μικτό ${nf(w.gross,0)} − απόβ. ${nf(w.tare,0)})`:""}</div>`:""}${w.note?`<div class="meta">${esc(w.note)}</div>`:""}${adg}</div>`;
+  }).join("");
   renderChart(c);
 }
+function wLabel(c,w){const i=c.ws.filter(x=>x.type==="w"&&(x.date<w.date||x===w)).length;return w.type==="w"?`${i}η ζύγιση`:TYPES[w.type]}
+function rangeCalc(l,c,fromId,toId){
+  const a=c.ws.findIndex(w=>w.id===fromId),b=c.ws.findIndex(w=>w.id===toId);
+  if(a<0||b<0||b<=a)return null;
+  const A=c.ws[a],B=c.ws[b],d=dd(A.date,B.date);if(d<=0)return null;
+  const r={A,B,days:d,gain:B.weight-A.weight};r.adg=r.gain/d;
+  let f=0,fd2=0,gs=0,ok=true;
+  for(let i=a+1;i<=b;i++){const x=c.rows[i];if(x.intake!=null){f+=x.intake*x.days;fd2+=x.days;gs+=x.gain}else if(x.w.type==="w")ok=false;}
+  if(fd2>0&&gs>0){r.fcr=f/gs;r.feedPart=!ok||fd2<d;}
+  return r;
+}
+function defaultRange(c){const ld=c.load||c.ws[0];const ws=c.ws.filter(w=>w.type==="w");const to=ws[0]||c.ws[c.ws.length-1];return{from:ld&&ld.id,to:to&&to.id}}
+function renderRange(l,c){
+  const card=$("#rangeCard");if(c.ws.length<2){card.classList.add("hide");return}card.classList.remove("hide");
+  const def=defaultRange(c);let rg=Object.assign({},def,l.range||{});
+  if(!c.ws.some(w=>w.id===rg.from))rg.from=def.from;if(!c.ws.some(w=>w.id===rg.to))rg.to=def.to;
+  const opt=sel=>c.ws.map(w=>`<option value="${esc(w.id)}"${w.id===sel?" selected":""}>${wLabel(c,w)} · ${fd(w.date)} · ${nf(w.weight)} kg</option>`).join("");
+  $("#rFrom").innerHTML=opt(rg.from);$("#rTo").innerHTML=opt(rg.to);
+  const r=rangeCalc(l,c,rg.from,rg.to);
+  $("#rOut").innerHTML=!r?'<p class="note">Η ζύγιση «Έως» πρέπει να είναι μεταγενέστερη από τη ζύγιση «Από».</p>':
+   `<div class="kpis"><div class="kpi"><div class="l">ΜΗΑΒ/ζώο</div><div class="v ${cls(r.adg)}">${g(r.adg)}</div><div class="s">ανά ημέρα</div></div>
+    <div class="kpi"><div class="l">Αύξηση/ζώο</div><div class="v ${cls(r.gain)}">${sgn(r.gain)} kg</div><div class="s">${nf(r.A.weight)} → ${nf(r.B.weight)} kg</div></div>
+    <div class="kpi"><div class="l">Ημέρες</div><div class="v">${r.days}</div><div class="s">${fd(r.A.date)} → ${fd(r.B.date)}</div></div>
+    ${r.fcr!=null?`<div class="kpi"><div class="l">FCR διαστήματος</div><div class="v">${nf(r.fcr,2)}</div><div class="s">${r.feedPart?"μόνο για τα διαστήματα με ζωοτροφή":"kg ζωοτρ./kg αύξησης"}</div></div>`:""}</div>`;
+}
+function rangeChanged(){const l=lots.find(x=>x.id===cur);if(!l)return;l.range={from:$("#rFrom").value,to:$("#rTo").value};persist(l);renderRange(l,calc(l))}
+$("#rFrom").addEventListener("change",rangeChanged);$("#rTo").addEventListener("change",rangeChanged);
+
+/* ear tags */
+const normTag=t=>String(t).toUpperCase().replace(/\s+/g,"");
+function parseTags(txt){
+  const out=[];txt.split(/[\n,;\t]+/).forEach(line=>{line=line.trim();if(!line)return;
+    const tk=line.split(/\s+/);
+    if(tk.length>1&&tk.every(x=>x.replace(/\D/g,"").length>=6))tk.forEach(x=>out.push(normTag(x)));else out.push(normTag(line));});
+  return out.filter(Boolean);
+}
+const fmtTag=t=>t.replace(/^([A-Z]{2})(\d)/,"$1 $2");
+function renderTags(l){
+  const tags=l.tags||[],q=normTag($("#tagFilter").value||"");
+  $("#tagCount").textContent=`· ${tags.length}`+(l.heads?` / ${l.heads} ζώα`:"")+(l.heads&&tags.length&&tags.length!==l.heads?" ⚠":"");
+  const shown=q?tags.filter(t=>t.includes(q)):tags;
+  $("#tagList").innerHTML=!tags.length?'<p class="note">Δεν έχουν καταχωρηθεί ενώτια. Πάτα «+ Προσθήκη».</p>':
+    !shown.length?'<p class="note">Δεν βρέθηκε.</p>':
+    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}">${esc(fmtTag(t))}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
+}
+$("#tagFilter").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);if(l)renderTags(l)});
+$("#btnAddTags").onclick=()=>{$("#tagInput").value="";$("#tagPrev").textContent="";open("#mTags");setTimeout(()=>$("#tagInput").focus(),50)};
+$("#tagInput").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);const n=parseTags($("#tagInput").value);const ex=new Set(l.tags||[]);const nw=[...new Set(n)].filter(t=>!ex.has(t));
+  const other=nw.map(t=>[t,lots.find(o=>o.id!==l.id&&(o.tags||[]).includes(t))]).filter(x=>x[1]);
+  $("#tagPrev").innerHTML=n.length?`Νέα: <b>${nw.length}</b>`+(n.length-nw.length?` · παραλείπονται ${n.length-nw.length} διπλά`:"")+(other.length?`<br>⚠ ${other.length} υπάρχουν ήδη σε άλλη παρτίδα: `+other.slice(0,5).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1].name)})`).join(", "):""):""});
+$("#btnSaveTags").onclick=()=>{const l=lots.find(x=>x.id===cur);const ex=l.tags||[];const set=new Set(ex);let add=0;
+  parseTags($("#tagInput").value).forEach(t=>{if(!set.has(t)){set.add(t);ex.push(t);add++}});
+  l.tags=ex;$("#mTags").classList.add("hide");if(add){persist(l);toast(`Προστέθηκαν ${add} ενώτια`)}else toast("Δεν προστέθηκε κάτι νέο");renderTags(l)};
+$("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag]");if(!b)return;const t=b.dataset.rmtag;
+  confirmBox(`Διαγραφή του ενωτίου ${fmtTag(t)};`,()=>{const l=lots.find(x=>x.id===cur);l.tags=(l.tags||[]).filter(x=>x!==t);persist(l);renderTags(l)})});
+$("#btnCopyTags").onclick=async()=>{const l=lots.find(x=>x.id===cur);const txt=(l.tags||[]).map(fmtTag).join("\n");if(!txt){toast("Δεν υπάρχουν ενώτια");return}
+  try{await navigator.clipboard.writeText(txt);toast(`Αντιγράφηκαν ${l.tags.length} ενώτια`)}catch(e){$("#csvTxt").value=txt;open("#mCsv")}};
+$("#tagSearch").addEventListener("input",()=>renderList());
+
 function renderChart(c){
   const el=$("#chart"), ws=c.ws;
   if(ws.length<2){el.innerHTML='<p class="note">Η καμπύλη εμφανίζεται με τουλάχιστον 2 ζυγίσεις.</p>';return;}
@@ -376,9 +493,14 @@ function renderChart(c){
   const pts=ws.map(w=>[X(new Date(w.date).getTime()),Y(w.weight),w]);
   const path=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
   const col=w=>w.type==="load"?"var(--blue)":w.type==="arr"?"var(--warn)":"var(--acc)";
+  let segs="";
+  for(let i=1;i<pts.length;i++){const r=c.rows[i],a=pts[i-1],b=pts[i];if(b[0]-a[0]<46)continue;
+    const txt=r.w.type==="arr"?`${sgn(r.gain/r.prev.weight*100)}%`:r.adg!=null?g(r.adg):"";if(!txt)continue;
+    const mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2-9;
+    segs+=`<text x="${mx}" y="${my}" text-anchor="middle" style="font-size:11px;font-weight:600;fill:${r.adg<0?"var(--warn)":"var(--acc)"};paint-order:stroke;stroke:var(--card);stroke-width:3px">${txt}</text>`;}
   const dots=pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="4.5" fill="${col(p[2])}" stroke="var(--card)" stroke-width="2"><title>${fd(p[2].date)} · ${nf(p[2].weight)} kg</title></circle>`).join("");
   const xl=[pts[0],pts[pts.length-1]].map((p,i)=>`<text x="${p[0]}" y="${H-8}" text-anchor="${i?"end":"start"}">${fd(p[2].date)}</text>`).join("");
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Καμπύλη μέσου βάρους">${grid}<path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2.5"/>${dots}${xl}<text x="${P.l}" y="10">kg</text></svg>
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Καμπύλη μέσου βάρους">${grid}<path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2.5"/>${dots}${segs}${xl}<text x="${P.l}" y="10">kg</text></svg>
   <div class="meta"><span style="color:var(--blue)">●</span> Φόρτωση &nbsp; <span style="color:var(--warn)">●</span> Άφιξη &nbsp; <span style="color:var(--acc)">●</span> Ζυγίσεις</div>`;
 }
 function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x)));const f=x/p;return(f<1.5?1:f<3?2:f<7?5:10)*p;}
@@ -457,7 +579,7 @@ function openW(w){
   hint();open("#mW");
 }
 $("#btnAddW").onclick=()=>openW(null);
-$("#tbl").addEventListener("click",e=>{const b=e.target.closest("[data-ew]");if(!b)return;const l=lots.find(x=>x.id===cur);openW(l.weighings.find(w=>w.id===b.dataset.ew))});
+["#tbl","#wcards"].forEach(sel=>$(sel).addEventListener("click",e=>{const b=e.target.closest("[data-ew]");if(!b)return;const l=lots.find(x=>x.id===cur);openW(l.weighings.find(w=>w.id===b.dataset.ew))}));
 $("#fW").onsubmit=e=>{
   e.preventDefault();const f=e.target;const l=lots.find(x=>x.id===cur);
   hint();const tr=f.type.value!=="w"||f.wMode.value==="grp";
@@ -561,18 +683,22 @@ function xlsxBytes(){
     {h:"Απώλεια μεταφοράς kg",w:11,f:"n1"},{h:"Απώλεια μεταφοράς %",w:11,f:"pct"},
     {h:"Τελ. ζύγιση",w:12,f:"d"},{h:"Τελ. βάρος kg",w:11,f:"n1"},{h:"Ημέρες από άφιξη",w:10,f:"n0"},
     {h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ τελ. διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
-    {h:"Μέση κατανάλωση kg/ζώο/ημ",w:12,f:"n2"},{h:"Σύνολο ζωοτροφής kg/ζώο",w:12,f:"n0"},{h:"FCR σωρευτικό",w:10,f:"n2"},{h:"Αποδοτικότητα g/kg",w:11,f:"n0"},{h:"Βάση ζωοτροφής",w:10},{h:"Σημειώσεις",w:24}],rows:[]};
+    {h:"Μέση κατανάλωση kg/ζώο/ημ",w:12,f:"n2"},{h:"Σύνολο ζωοτροφής kg/ζώο",w:12,f:"n0"},{h:"FCR σωρευτικό",w:10,f:"n2"},{h:"Αποδοτικότητα g/kg",w:11,f:"n0"},{h:"Βάση ζωοτροφής",w:10},{h:"Επιλεγμένο διάστημα",w:34},{h:"Ημέρες επιλ. διαστ.",w:10,f:"n0"},{h:"ΜΗΑΒ επιλ. διαστ. g/ημ",w:11,f:"n0"},{h:"Ενώτια (πλήθος)",w:9,f:"n0"},{h:"Σημειώσεις",w:24}],rows:[]};
+  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22}],rows:[]};
   const det={name:"Ζυγίσεις",cols:[
     {h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:12,f:"d"},{h:"Τύπος",w:16},{h:"Ζώα",w:7,f:"n0"},{h:"Μικτό kg",w:10,f:"n0"},{h:"Απόβαρο kg",w:10,f:"n0"},{h:"Καθαρό kg",w:10,f:"n0"},{h:"Μέσο βάρος kg",w:11,f:"n1"},
     {h:"Ημέρες διαστ.",w:9,f:"n0"},{h:"Διαφορά kg",w:10,f:"n1"},{h:"ΜΗΑΒ διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
     {h:"Ζωοτροφή kg/ζώο/ημ",w:11,f:"n2"},{h:"FCR διαστ.",w:9,f:"n2"},{h:"Σημείωση",w:24}],rows:[]};
   ls.forEach(l=>{const c=calc(l);
     sum.rows.push([l.name,l.breed,l.sex,l.heads,l.supplier,c.load&&c.load.date,c.load&&c.load.heads,c.load&&c.load.net,c.load&&c.load.weight,c.arr&&c.arr.date,c.arr&&c.arr.heads,c.arr&&c.arr.net,c.arr&&c.arr.weight,r1(c.tLoss),r1(c.tPct),
-      c.last&&c.last.date,c.last&&c.last.weight,c.dFarm,gr(c.adgFarm),gr(c.adgLast),gr(c.adgTot),r2(c.intakeAvg),c.feedHead!=null?Math.round(c.feedHead):null,r2(c.fcrCum),gr(c.effCum),l.feedBasis||"Νωπή",l.notes]);
+      c.last&&c.last.date,c.last&&c.last.weight,c.dFarm,gr(c.adgFarm),gr(c.adgLast),gr(c.adgTot),r2(c.intakeAvg),c.feedHead!=null?Math.round(c.feedHead):null,r2(c.fcrCum),gr(c.effCum),l.feedBasis||"Νωπή",
+      ...(()=>{const d=defaultRange(c),rg=Object.assign({},d,l.range||{});const r=rangeCalc(l,c,rg.from,rg.to);return r?[`${wLabel(c,r.A)} ${fd(r.A.date)} → ${wLabel(c,r.B)} ${fd(r.B.date)}`,r.days,gr(r.adg)]:[null,null,null]})(),
+      (l.tags||[]).length||null,l.notes]);
+    (l.tags||[]).forEach((t,i)=>tg.rows.push([l.name,i+1,fmtTag(t)]));
     let n=0;c.rows.forEach(r=>{const w=r.w;
       det.rows.push([l.name,w.date,w.type==="w"?`${++n}η ζύγιση`:TYPES[w.type],w.heads,w.gross,w.tare,w.net,w.weight,r.days,r1(r.gain),gr(r.adg),gr(r.adgArr),gr(r.adgLoad),r2(r.intake),r2(r.fcr),w.note]);});
   });
-  return XL.build([sum,det]);
+  return XL.build([sum,det,tg]);
 }
 const xlsxName=()=>"MHAB_vooeidon_"+new Date().toISOString().slice(0,10)+".xlsx";
 $("#btnXlsx").onclick=()=>{if(!lots.length){toast("Δεν υπάρχουν δεδομένα");return}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([xlsxBytes()],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=xlsxName();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις")};
