@@ -242,15 +242,15 @@ svg text{fill:var(--mute);font-size:11px}
 
 <div class="modal hide" id="mTags"><div class="box">
   <h2 style="margin-bottom:6px">🏷️ Προσθήκη ενωτίων</h2>
-  <p class="note">Γράψε ή επικόλλησε τους αριθμούς, ένα ενώτιο σε κάθε γραμμή (ή χωρισμένα με κόμμα). Τα κενά μέσα στον αριθμό αγνοούνται. Οι διπλές καταχωρήσεις παραλείπονται αυτόματα.</p>
+  <p class="note">Ένα ενώτιο σε κάθε γραμμή. Προαιρετικά και στοιχεία, χωρισμένα με «|»:<br><b>ενώτιο | ημ. γέννησης | φύλο | φυλή | ημ. άφιξης</b> (παύλα «-» αν λείπει η γέννηση).</p>
   <textarea id="tagInput" rows="8" placeholder="FR 4512345678&#10;FR 4512345679&#10;…" style="font-family:ui-monospace,monospace"></textarea>
   <div class="row" style="margin-top:8px">
-    <button type="button" class="pri sm" id="btnScanCam">📷 Φωτογραφία barcode</button>
-    <button type="button" class="sm" id="btnScanGal">🖼️ Από συλλογή</button>
+    <button type="button" class="pri sm" id="btnScanCam">📷 Φωτογραφία διαβατηρίου</button>
+    <button type="button" class="sm" id="btnScanGal">🖼️ Εικόνες ή PDF</button>
     <input type="file" id="scanCam" accept="image/*" capture="environment" class="hide">
-    <input type="file" id="scanGal" accept="image/*" multiple class="hide">
+    <input type="file" id="scanGal" accept="image/*,application/pdf,.pdf" multiple class="hide">
   </div>
-  <p class="note" id="scanMsg">Φωτογράφισε τον γραμμικό κώδικα του διαβατηρίου από κοντά, ίσια και με καλό φως. Ο αριθμός προστίθεται στο πλαίσιο για έλεγχο.</p>
+  <p class="note" id="scanMsg">Φωτογράφισε ή διάλεξε σκαναρισμένο το πάνω μέρος του διαβατηρίου (barcode και στοιχεία βοοειδούς). Περνάνε αυτόματα ενώτιο, γέννηση, φύλο, φυλή και άφιξη στην Ελλάδα, για έλεγχο πριν την αποθήκευση.</p>
   <p class="note" id="tagPrev"></p>
   <div class="row"><span class="sp"></span><button type="button" data-close>Άκυρο</button><button class="pri" id="btnSaveTags">Προσθήκη</button></div>
 </div></div>
@@ -459,12 +459,23 @@ $("#rFrom").addEventListener("change",rangeChanged);$("#rTo").addEventListener("
 
 /* ear tags */
 const normTag=t=>String(t).toUpperCase().replace(/\s+/g,"");
-function parseTags(txt){
-  const out=[];txt.split(/[\n,;\t]+/).forEach(line=>{line=line.trim();if(!line)return;
-    const tk=line.split(/\s+/);
-    if(tk.length>1&&tk.every(x=>x.replace(/\D/g,"").length>=6))tk.forEach(x=>out.push(normTag(x)));else out.push(normTag(line));});
-  return out.filter(Boolean);
+const stripAcc=s=>String(s).normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase();
+function toIso(s){const m=String(s).match(/(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4})/);if(!m)return null;const d=+m[1],mo=+m[2],y=+m[3];if(d<1||d>31||mo<1||mo>12||y<1990||y>2100)return null;return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
+function parseEntries(txt){
+  const out=[];txt.split(/\n+/).forEach(line=>{line=line.trim();if(!line)return;
+    if(line.includes("|")){const p=line.split("|").map(x=>x.trim());const tag=normTag(p[0]);if(!tag)return;const info={};let di=0;
+      p.slice(1).forEach(f=>{if(f===""||f==="-"){if(f==="-")di++;return}const iso=toIso(f);
+        if(iso){if(di===0)info.birth=iso;else info.arr=iso;di++}
+        else{const u=stripAcc(f);if(/^(ΑΡΣ|Α$|♂)/.test(u))info.sex="Αρσενικό";else if(/^(ΘΗΛ|Θ$|♀)/.test(u))info.sex="Θηλυκό";else info.breed=f.toUpperCase()}});
+      out.push({tag,info});return}
+    line.split(/[,;\t]+/).forEach(part=>{part=part.trim();if(!part)return;const tk=part.split(/\s+/);
+      if(tk.length>1&&tk.every(x=>x.replace(/\D/g,"").length>=6))tk.forEach(x=>out.push({tag:normTag(x),info:{}}));else out.push({tag:normTag(part),info:{}})});});
+  return out.filter(e=>e.tag);
 }
+function parseTags(txt){return parseEntries(txt).map(e=>e.tag)}
+function entryLine(tag,i){i=i||{};const f=[i.birth?fd(i.birth):(i.arr?"-":""),i.sex||"",i.breed||"",i.arr?fd(i.arr):""];while(f.length&&!f[f.length-1])f.pop();return f.length?[tag,...f].join(" | "):tag}
+function ageTxt(iso){const b=new Date(iso),n=new Date();let m=(n.getFullYear()-b.getFullYear())*12+n.getMonth()-b.getMonth()-(n.getDate()<b.getDate()?1:0);if(!(m>=0))return"";return m<24?`${m} μην.`:`${Math.floor(m/12)} ετών`}
+function infoTxt(i){if(!i)return"";const a=[];if(i.sex)a.push(i.sex==="Αρσενικό"?"♂":"♀");if(i.breed)a.push(esc(i.breed));if(i.birth)a.push(`γεν. ${fd(i.birth)} (${ageTxt(i.birth)})`);if(i.arr)a.push(`άφιξη ${fd(i.arr)}`);return a.join(" · ")}
 const fmtTag=t=>t.replace(/^([A-Z]{2})(\d)/,"$1 $2");
 function renderTags(l){
   const tags=l.tags||[],q=normTag($("#tagFilter").value||"");
@@ -472,18 +483,21 @@ function renderTags(l){
   const shown=q?tags.filter(t=>t.includes(q)):tags;
   $("#tagList").innerHTML=!tags.length?'<p class="note">Δεν έχουν καταχωρηθεί ενώτια. Πάτα «+ Προσθήκη».</p>':
     !shown.length?'<p class="note">Δεν βρέθηκε.</p>':
-    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}">${esc(fmtTag(t))}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
+    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}" data-edtag="${esc(t)}" style="cursor:pointer">${esc(fmtTag(t))}${infoTxt((l.tagInfo||{})[t])?` <span class="meta" style="font-family:system-ui,sans-serif">${infoTxt(l.tagInfo[t])}</span>`:""}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
 }
 $("#tagFilter").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);if(l)renderTags(l)});
-$("#btnAddTags").onclick=()=>{$("#tagInput").value="";$("#tagPrev").textContent="";open("#mTags");setTimeout(()=>$("#tagInput").focus(),50)};
-$("#tagInput").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);const n=parseTags($("#tagInput").value);const ex=new Set(l.tags||[]);const nw=[...new Set(n)].filter(t=>!ex.has(t));
+$("#btnAddTags").onclick=()=>{window._edTag=null;$("#tagInput").value="";$("#tagPrev").textContent="";open("#mTags");setTimeout(()=>$("#tagInput").focus(),50)};
+$("#tagInput").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);const ents=parseEntries($("#tagInput").value);const n=ents.map(e=>e.tag);const ex=new Set(l.tags||[]);const nw=[...new Set(n)].filter(t=>!ex.has(t)&&!t.includes("?"));const upd=ents.filter(e=>ex.has(e.tag)&&Object.keys(e.info).length).length;const qm=n.filter(t=>t.includes("?")).length;
   const other=nw.map(t=>[t,lots.find(o=>o.id!==l.id&&(o.tags||[]).includes(t))]).filter(x=>x[1]);
-  $("#tagPrev").innerHTML=n.length?`Νέα: <b>${nw.length}</b>`+(n.length-nw.length?` · παραλείπονται ${n.length-nw.length} διπλά`:"")+(other.length?`<br>⚠ ${other.length} υπάρχουν ήδη σε άλλη παρτίδα: `+other.slice(0,5).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1].name)})`).join(", "):""):""});
-$("#btnSaveTags").onclick=()=>{const l=lots.find(x=>x.id===cur);const ex=l.tags||[];const set=new Set(ex);let add=0;
-  parseTags($("#tagInput").value).forEach(t=>{if(!set.has(t)){set.add(t);ex.push(t);add++}});
-  l.tags=ex;$("#mTags").classList.add("hide");if(add){persist(l);toast(`Προστέθηκαν ${add} ενώτια`)}else toast("Δεν προστέθηκε κάτι νέο");renderTags(l)};
-$("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag]");if(!b)return;const t=b.dataset.rmtag;
-  confirmBox(`Διαγραφή του ενωτίου ${fmtTag(t)};`,()=>{const l=lots.find(x=>x.id===cur);l.tags=(l.tags||[]).filter(x=>x!==t);persist(l);renderTags(l)})});
+  $("#tagPrev").innerHTML=n.length?`Νέα: <b>${nw.length}</b>`+(upd?` · ενημερώνονται ${upd}`:"")+(n.length-nw.length-upd>0?` · παραλείπονται ${n.length-nw.length-upd} διπλά`:"")+(qm?`<br>⚠ ${qm} γραμμές με «?» δεν θα αποθηκευτούν`:"")+(other.length?`<br>⚠ ${other.length} υπάρχουν ήδη σε άλλη παρτίδα: `+other.slice(0,5).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1].name)})`).join(", "):""):""});
+$("#btnSaveTags").onclick=()=>{const l=lots.find(x=>x.id===cur);const ex=l.tags||[];const set=new Set(ex);let add=0,upd=0;const ti=l.tagInfo||{};
+  parseEntries($("#tagInput").value).forEach(e=>{const t=e.tag;if(t.includes("?"))return;const isNew=!set.has(t);if(isNew){set.add(t);ex.push(t);add++}
+    if(Object.keys(e.info).length){const old=JSON.stringify(ti[t]||{});ti[t]=window._edTag===t?e.info:Object.assign({},ti[t],e.info);if(!isNew&&old!==JSON.stringify(ti[t]))upd++}});
+  window._edTag=null;l.tags=ex;l.tagInfo=ti;$("#mTags").classList.add("hide");if(add||upd){persist(l);toast((add?`Προστέθηκαν ${add} ενώτια`:"")+(add&&upd?" · ":"")+(upd?`Ενημερώθηκαν ${upd}`:""))}else toast("Δεν προστέθηκε κάτι νέο");renderTags(l)};
+$("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag]");
+  if(!b){const c=e.target.closest("[data-edtag]");if(c){const l=lots.find(x=>x.id===cur),t=c.dataset.edtag,i=(l.tagInfo||{})[t]||{};window._edTag=t;
+    $("#tagInput").value=[t,i.birth?fd(i.birth):"-",i.sex||"",i.breed||"",i.arr?fd(i.arr):""].join(" | ");$("#tagPrev").textContent="";open("#mTags")}return}const t=b.dataset.rmtag;
+  confirmBox(`Διαγραφή του ενωτίου ${fmtTag(t)};`,()=>{const l=lots.find(x=>x.id===cur);l.tags=(l.tags||[]).filter(x=>x!==t);if(l.tagInfo)delete l.tagInfo[t];persist(l);renderTags(l)})});
 $("#btnCopyTags").onclick=async()=>{const l=lots.find(x=>x.id===cur);const txt=(l.tags||[]).map(fmtTag).join("\n");if(!txt){toast("Δεν υπάρχουν ενώτια");return}
   try{await navigator.clipboard.writeText(txt);toast(`Αντιγράφηκαν ${l.tags.length} ενώτια`)}catch(e){$("#csvTxt").value=txt;open("#mCsv")}};
 $("#tagSearch").addEventListener("input",()=>renderList());
@@ -493,9 +507,7 @@ let zxLoad=null;
 function loadZX(){if(window.ZXing)return Promise.resolve(true);if(!zxLoad)zxLoad=new Promise(res=>{const sc=document.createElement("script");sc.src="scan.js";sc.onload=()=>res(!!window.ZXing);sc.onerror=()=>{zxLoad=null;res(false)};document.head.appendChild(sc)});return zxLoad}
 function drawScaled(img,max,rot){const k=Math.min(1,max/Math.max(img.width,img.height));const w=Math.round(img.width*k),h=Math.round(img.height*k);const cv=document.createElement("canvas");
   if(rot){cv.width=h;cv.height=w;const x=cv.getContext("2d");x.translate(h/2,w/2);x.rotate(Math.PI/2);x.drawImage(img,-w/2,-h/2,w,h)}else{cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h)}return cv}
-async function decodeBarcodes(file){
-  const url=URL.createObjectURL(file);const img=new Image();
-  try{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url})}catch(e){URL.revokeObjectURL(url);return[]}
+async function decodeBarcodes(img){
   let out=[];
   if("BarcodeDetector" in window){try{const det=new BarcodeDetector();for(const rot of [0,1]){const r=await det.detect(drawScaled(img,2400,rot));out=r.map(x=>x.rawValue).filter(Boolean);if(out.length)break}}catch(e){}}
   if(!out.length&&await loadZX()){
@@ -505,13 +517,86 @@ async function decodeBarcodes(file){
     outer:for(const max of [1600,1000,2400])for(const rot of [0,1]){try{const cv=drawScaled(img,max,rot);
       const r=rd.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));if(r&&r.getText()){out=[r.getText()];break outer}}catch(e){}}
   }
-  URL.revokeObjectURL(url);return out.map(v=>v.trim()).filter(Boolean);
+  return out.map(v=>v.trim()).filter(Boolean);
 }
+/* passport OCR */
+const ocrW={},ocrLoad={};
+const absU=p=>new URL(p,location.href).href;
+function loadScript(src){return new Promise(res=>{const sc=document.createElement("script");sc.src=src;sc.onload=()=>res(true);sc.onerror=()=>res(false);document.head.appendChild(sc)})}
+function getOCR(lang){lang=lang||"ell";
+  if(ocrW[lang])return Promise.resolve(ocrW[lang]);
+  if(!ocrLoad[lang])ocrLoad[lang]=(async()=>{try{
+    if(!/^https?:/.test(location.protocol))return null;
+    if(!window.Tesseract&&!(await loadScript("tesseract.min.js")))return null;
+    ocrW[lang]=await Tesseract.createWorker(lang,1,{workerPath:absU("worker.min.js"),corePath:absU("tesseract-core-simd-lstm.wasm.js"),langPath:absU(".").replace(/\/$/,""),workerBlobURL:false,gzip:true});
+    return ocrW[lang]}catch(e){return null}finally{if(!ocrW[lang])ocrLoad[lang]=null}})();
+  return ocrLoad[lang];
+}
+function drawRot(img,max,deg){const k=Math.min(1,max/Math.max(img.width,img.height));const w=Math.round(img.width*k),h=Math.round(img.height*k);const cv=document.createElement("canvas");const sw=deg%180!==0;
+  cv.width=sw?h:w;cv.height=sw?w:h;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,cv.width,cv.height);x.translate(cv.width/2,cv.height/2);x.rotate(deg*Math.PI/180);x.drawImage(img,-w/2,-h/2,w,h);return cv}
+function lev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i];for(let j=1;j<=b.length;j++)m[i][j]=i?Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1)):j}return m[a.length][b.length]}
+const BREEDS=["ΛΙΜΟΥΖΙΝ","ΣΑΡΟΛΕ","ΣΑΡΟΛΑΙ","ΜΠΛΟΝΤ ΑΚΙΤΕΝ","ΩΜΠΡΑΚ","ΟΜΠΡΑΚ","ΣΑΛΕΡ","ΣΙΜΕΝΤΑΛ","ΜΟΝΜΠΕΛΙΑΡ","ΧΟΛΣΤΑΙΝ","ΑΝΓΚΟΥΣ","ΑΓΚΟΥΣ","ΧΕΡΕΦΟΡΝΤ","ΓΚΑΣΚΟΝ","ΠΑΡΤΕΝΕΖ","ΜΠΑΖΑΝΤΕΖ","ΝΟΡΜΑΝΤ","ΔΙΑΣΤΑΥΡΩΣΗ","ΔΙΑΣΤΑΥΡΩΜΕΝΑ","ΗΜΙΑΙΜΑ","ΒΕΛΓΙΚΗ ΚΥΑΝΟΛΕΥΚΗ"];
+function snapBreed(b){if(!b)return b;const known=new Set(BREEDS);lots.forEach(l=>Object.values(l.tagInfo||{}).forEach(i=>{if(i&&i.breed)known.add(i.breed)}));
+  let best=null,bd=99;known.forEach(k=>{const d=lev(stripAcc(k),b);if(d<bd){bd=d;best=k}});return bd<=Math.max(1,Math.floor(b.length/4))?best:b}
+function ocrDate(s){const m=s.match(/(\d{2})\s?([\/.\-1lI|])\s?(\d{2})\s?([\/.\-1lI|])\s?(\d{4})/);return m?toIso(`${m[1]}/${m[3]}/${m[5]}`):null}
+function parsePassport(text){
+  const L=text.split(/\n/).map(stripAcc),r={},all=L.join("\n");
+  if(/ΑΡΣΕΝ/.test(all))r.sex="Αρσενικό";else if(/ΘΗΛΥΚ/.test(all))r.sex="Θηλυκό";
+  else{const sl=L.find(x=>/^\W{0,3}ΦΥΛΟ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x));
+    if(sl)for(const wd of sl.split(/[^Α-Ω]+/)){if(wd.length<5||/^ΦΥΛ|^ΧΩΡΑ|^ΓΕΝΝ/.test(wd))continue;if(lev(wd,"ΑΡΣΕΝΙΚΟ")<=3){r.sex="Αρσενικό";break}if(lev(wd,"ΘΗΛΥΚΟ")<=2){r.sex="Θηλυκό";break}}}
+  let bl=L.find(x=>/^\W{0,3}ΦΥΛΗ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x)&&!/ΑΡΣΕΝ|ΘΗΛΥΚ/.test(x));
+  if(bl){let v=bl.replace(/^\W{0,3}ΦΥΛ\S*/,"").split(/ΧΩΡΑ/)[0].replace(/[^Α-ΩA-Z ]/g," ").replace(/\s+/g," ").trim();if(v.length>=3)r.breed=snapBreed(v)}
+  const gl=L.find(x=>/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/.test(x));if(gl){const d=ocrDate(gl.split(/ΓΕΝΝ\S*/)[1]||"");if(d)r.birth=d}
+  const al=L.find(x=>/ΑΦΙΞ\S*\s+ΣΤΗ\S*\s+ΕΛΛ/.test(x));if(al){const d=ocrDate(al.split(/ΕΛΛ\S*/).pop()||"");if(d)r.arr=d}
+  return r;
+}
+async function ocrTagNo(img,deg){
+  const w=await getOCR("eng");if(!w)return null;
+  try{const r=await w.recognize(drawRot(img,1600,deg));const cnt={};(r.data.text.match(/[A-Z]{2}\s?[0-9O]{9,12}\b/g)||[]).forEach(m=>{m=m.replace(/\s/g,"");m=m.slice(0,2)+m.slice(2).replace(/O/g,"0");cnt[m]=(cnt[m]||0)+1});
+    const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];return top?{tag:top[0],sure:top[1]>=2}:null}catch(e){return null}
+}
+let lastDeg=0;
+async function ocrPassport(img){
+  const w=await getOCR();if(!w)return null;
+  let best=0,bc=-1;for(const deg of [0,270,90,180]){try{const r=await w.recognize(drawRot(img,800,deg));if(r.data.confidence>bc){bc=r.data.confidence;best=deg}if(bc>=45)break}catch(e){}}
+  lastDeg=best;
+  try{const r=await w.recognize(drawRot(img,1600,best));return parsePassport(r.data.text)}catch(e){return null}
+}
+let pdfLoad=null;
+function getPDF(){if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);if(!pdfLoad)pdfLoad=loadScript("pdf.min.js").then(ok=>{if(!ok||!window.pdfjsLib){pdfLoad=null;return null}pdfjsLib.GlobalWorkerOptions.workerSrc=absU("pdf.worker.min.js");return pdfjsLib});return pdfLoad}
+const isPdf=f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name||"");
+async function loadImg(f){const url=URL.createObjectURL(f);const img=new Image();try{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url});return img}catch(e){return null}finally{setTimeout(()=>URL.revokeObjectURL(url),60000)}}
 async function scanFiles(files){
-  const msg=$("#scanMsg");let ok=0,fail=0;msg.textContent="⏳ Ανάγνωση barcode…";
-  for(const f of files){const r=await decodeBarcodes(f);if(r.length){ok+=r.length;const ta=$("#tagInput");ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+r.join("\n")+"\n"}else fail++}
+  const msg=$("#scanMsg");
+  // expand into pages
+  const jobs=[];let pdfFail=0;
+  for(const f of files){
+    if(isPdf(f)){msg.textContent="⏳ Άνοιγμα PDF…";const lib=await getPDF();if(!lib){pdfFail++;continue}
+      try{const doc=await lib.getDocument({data:await f.arrayBuffer()}).promise;
+        for(let i=1;i<=doc.numPages;i++)jobs.push(async()=>{const pg=await doc.getPage(i);const v0=pg.getViewport({scale:1});const vp=pg.getViewport({scale:Math.min(4,2400/Math.max(v0.width,v0.height))});
+          const cv=document.createElement("canvas");cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);await pg.render({canvasContext:cx,viewport:vp}).promise;return cv})}catch(e){pdfFail++}}
+    else jobs.push(()=>loadImg(f));}
+  await scanJobs(jobs,pdfFail);
+}
+async function scanJobs(files,pdfFail){
+  const msg=$("#scanMsg");let ok=0,noTag=0,noInfo=0,n=0,fromTxt=0;
+  for(const job of files){n++;msg.textContent=`⏳ Ανάγνωση διαβατηρίου${files.length>1?` ${n}/${files.length}`:""}… (την πρώτη φορά αργεί λίγο)`;
+    let img=null;try{img=await job()}catch(e){}if(!img)continue;
+    const codes=await decodeBarcodes(img);let info=null;
+    try{info=await ocrPassport(img);
+      if(!codes.length&&info){const t=await ocrTagNo(img,lastDeg);if(t){codes.push(t.tag+(t.sure?"":"?"));fromTxt++}}
+      }catch(e){}
+    const has=info&&Object.keys(info).length;if(!has)noInfo++;
+    if(!codes.length&&!has)continue;
+    const tag=codes[0]||"???";if(tag.includes("?"))noTag++;else ok++;
+    const ta=$("#tagInput");ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+entryLine(tag,info)+"\n"}
   $("#tagInput").dispatchEvent(new Event("input"));
-  msg.innerHTML=(ok?`✓ Διαβάστηκαν <b>${ok}</b>. Έλεγξε τον αριθμό στο πλαίσιο και συνέχισε με το επόμενο.`:"")+(fail?` ⚠ ${fail>1?fail+" φωτογραφίες δεν διαβάστηκαν":"Δεν διαβάστηκε barcode"}. Δοκίμασε πιο κοντά, ίσια, χωρίς σκιά ή γυάλισμα, ή γράψε τον αριθμό με το χέρι.`:"");
+  const bad=files.length-ok-noTag;
+  msg.innerHTML=(ok?`✓ Διαβάστηκαν <b>${ok}</b>. Έλεγξε τα στοιχεία στο πλαίσιο (ενώτιο | γέννηση | φύλο | φυλή | άφιξη) και διόρθωσε ό,τι χρειάζεται.`:"")
+    +(fromTxt?` ℹ️ Σε ${fromTxt} το barcode δεν διαβάστηκε και ο αριθμός πάρθηκε από το τυπωμένο κείμενο: έλεγξέ τον προσεκτικά.`:"")
+    +(noTag?` ⚠ Σε ${noTag} ο αριθμός ενωτίου έχει «?»: διόρθωσέ τον και σβήσε το «?» για να αποθηκευτεί.`:"")
+    +(bad>0?` ⚠ ${bad} ${files.length>1?"σελίδες/φωτογραφίες":""} δεν διαβάστηκαν καθόλου.`:"")+(pdfFail?` ⚠ ${pdfFail} PDF δεν άνοιξαν.`:"")
+    +(ok&&noInfo&&!bad?` Τα υπόλοιπα στοιχεία δεν διαβάστηκαν σε ${noInfo}· συμπλήρωσέ τα με το χέρι αν θέλεις.`:"");
 }
 $("#btnScanCam").onclick=()=>$("#scanCam").click();$("#btnScanGal").onclick=()=>$("#scanGal").click();
 ["#scanCam","#scanGal"].forEach(id=>$(id).addEventListener("change",e=>{const fs=[...e.target.files];e.target.value="";if(fs.length)scanFiles(fs)}));
@@ -719,7 +804,7 @@ function xlsxBytes(){
     {h:"Τελ. ζύγιση",w:12,f:"d"},{h:"Τελ. βάρος kg",w:11,f:"n1"},{h:"Ημέρες από άφιξη",w:10,f:"n0"},
     {h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ τελ. διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
     {h:"Μέση κατανάλωση kg/ζώο/ημ",w:12,f:"n2"},{h:"Σύνολο ζωοτροφής kg/ζώο",w:12,f:"n0"},{h:"FCR σωρευτικό",w:10,f:"n2"},{h:"Αποδοτικότητα g/kg",w:11,f:"n0"},{h:"Βάση ζωοτροφής",w:10},{h:"Επιλεγμένο διάστημα",w:34},{h:"Ημέρες επιλ. διαστ.",w:10,f:"n0"},{h:"ΜΗΑΒ επιλ. διαστ. g/ημ",w:11,f:"n0"},{h:"Ενώτια (πλήθος)",w:9,f:"n0"},{h:"Σημειώσεις",w:24}],rows:[]};
-  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22}],rows:[]};
+  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"}],rows:[]};
   const det={name:"Ζυγίσεις",cols:[
     {h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:12,f:"d"},{h:"Τύπος",w:16},{h:"Ζώα",w:7,f:"n0"},{h:"Μικτό kg",w:10,f:"n0"},{h:"Απόβαρο kg",w:10,f:"n0"},{h:"Καθαρό kg",w:10,f:"n0"},{h:"Μέσο βάρος kg",w:11,f:"n1"},
     {h:"Ημέρες διαστ.",w:9,f:"n0"},{h:"Διαφορά kg",w:10,f:"n1"},{h:"ΜΗΑΒ διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
@@ -729,7 +814,7 @@ function xlsxBytes(){
       c.last&&c.last.date,c.last&&c.last.weight,c.dFarm,gr(c.adgFarm),gr(c.adgLast),gr(c.adgTot),r2(c.intakeAvg),c.feedHead!=null?Math.round(c.feedHead):null,r2(c.fcrCum),gr(c.effCum),l.feedBasis||"Νωπή",
       ...(()=>{const d=defaultRange(c),rg=Object.assign({},d,l.range||{});const r=rangeCalc(l,c,rg.from,rg.to);return r?[`${wLabel(c,r.A)} ${fd(r.A.date)} → ${wLabel(c,r.B)} ${fd(r.B.date)}`,r.days,gr(r.adg)]:[null,null,null]})(),
       (l.tags||[]).length||null,l.notes]);
-    (l.tags||[]).forEach((t,i)=>tg.rows.push([l.name,i+1,fmtTag(t)]));
+    (l.tags||[]).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};tg.rows.push([l.name,i+1,fmtTag(t),x.birth,x.sex,x.breed,x.arr])});
     let n=0;c.rows.forEach(r=>{const w=r.w;
       det.rows.push([l.name,w.date,w.type==="w"?`${++n}η ζύγιση`:TYPES[w.type],w.heads,w.gross,w.tare,w.net,w.weight,r.days,r1(r.gain),gr(r.adg),gr(r.adgArr),gr(r.adgLoad),r2(r.intake),r2(r.fcr),w.note]);});
   });

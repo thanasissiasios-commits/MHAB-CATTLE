@@ -1,6 +1,7 @@
-const C="mhab-v2";
+const C="mhab-v4";
+const OCR=["tesseract.min.js","worker.min.js","tesseract-core-simd-lstm.wasm.js","ell.traineddata.gz","eng.traineddata.gz","pdf.min.js","pdf.worker.min.js"];
 const FILES=["./","index.html","app.js?v=1","scan.js","manifest.webmanifest","icon-192.png","icon-512.png"];
-self.addEventListener("install",e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting()))});
+self.addEventListener("install",e=>{e.waitUntil(caches.open(C).then(c=>c.addAll(FILES).then(()=>{c.addAll(OCR).catch(()=>{})})).then(()=>self.skipWaiting()))});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener("fetch",e=>{
   const u=new URL(e.request.url);
