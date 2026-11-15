@@ -244,6 +244,13 @@ svg text{fill:var(--mute);font-size:11px}
   <h2 style="margin-bottom:6px">🏷️ Προσθήκη ενωτίων</h2>
   <p class="note">Γράψε ή επικόλλησε τους αριθμούς, ένα ενώτιο σε κάθε γραμμή (ή χωρισμένα με κόμμα). Τα κενά μέσα στον αριθμό αγνοούνται. Οι διπλές καταχωρήσεις παραλείπονται αυτόματα.</p>
   <textarea id="tagInput" rows="8" placeholder="FR 4512345678&#10;FR 4512345679&#10;…" style="font-family:ui-monospace,monospace"></textarea>
+  <div class="row" style="margin-top:8px">
+    <button type="button" class="pri sm" id="btnScanCam">📷 Φωτογραφία barcode</button>
+    <button type="button" class="sm" id="btnScanGal">🖼️ Από συλλογή</button>
+    <input type="file" id="scanCam" accept="image/*" capture="environment" class="hide">
+    <input type="file" id="scanGal" accept="image/*" multiple class="hide">
+  </div>
+  <p class="note" id="scanMsg">Φωτογράφισε τον γραμμικό κώδικα του διαβατηρίου από κοντά, ίσια και με καλό φως. Ο αριθμός προστίθεται στο πλαίσιο για έλεγχο.</p>
   <p class="note" id="tagPrev"></p>
   <div class="row"><span class="sp"></span><button type="button" data-close>Άκυρο</button><button class="pri" id="btnSaveTags">Προσθήκη</button></div>
 </div></div>
@@ -480,6 +487,34 @@ $("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag
 $("#btnCopyTags").onclick=async()=>{const l=lots.find(x=>x.id===cur);const txt=(l.tags||[]).map(fmtTag).join("\n");if(!txt){toast("Δεν υπάρχουν ενώτια");return}
   try{await navigator.clipboard.writeText(txt);toast(`Αντιγράφηκαν ${l.tags.length} ενώτια`)}catch(e){$("#csvTxt").value=txt;open("#mCsv")}};
 $("#tagSearch").addEventListener("input",()=>renderList());
+
+/* barcode from photo */
+let zxLoad=null;
+function loadZX(){if(window.ZXing)return Promise.resolve(true);if(!zxLoad)zxLoad=new Promise(res=>{const sc=document.createElement("script");sc.src="scan.js";sc.onload=()=>res(!!window.ZXing);sc.onerror=()=>{zxLoad=null;res(false)};document.head.appendChild(sc)});return zxLoad}
+function drawScaled(img,max,rot){const k=Math.min(1,max/Math.max(img.width,img.height));const w=Math.round(img.width*k),h=Math.round(img.height*k);const cv=document.createElement("canvas");
+  if(rot){cv.width=h;cv.height=w;const x=cv.getContext("2d");x.translate(h/2,w/2);x.rotate(Math.PI/2);x.drawImage(img,-w/2,-h/2,w,h)}else{cv.width=w;cv.height=h;cv.getContext("2d").drawImage(img,0,0,w,h)}return cv}
+async function decodeBarcodes(file){
+  const url=URL.createObjectURL(file);const img=new Image();
+  try{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url})}catch(e){URL.revokeObjectURL(url);return[]}
+  let out=[];
+  if("BarcodeDetector" in window){try{const det=new BarcodeDetector();for(const rot of [0,1]){const r=await det.detect(drawScaled(img,2400,rot));out=r.map(x=>x.rawValue).filter(Boolean);if(out.length)break}}catch(e){}}
+  if(!out.length&&await loadZX()){
+    const Z=window.ZXing,hints=new Map();hints.set(Z.DecodeHintType.TRY_HARDER,true);
+    hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.ITF,Z.BarcodeFormat.CODE_39,Z.BarcodeFormat.EAN_13,Z.BarcodeFormat.CODE_93,Z.BarcodeFormat.CODABAR,Z.BarcodeFormat.QR_CODE,Z.BarcodeFormat.DATA_MATRIX]);
+    const rd=new Z.MultiFormatReader();rd.setHints(hints);
+    outer:for(const max of [1600,1000,2400])for(const rot of [0,1]){try{const cv=drawScaled(img,max,rot);
+      const r=rd.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));if(r&&r.getText()){out=[r.getText()];break outer}}catch(e){}}
+  }
+  URL.revokeObjectURL(url);return out.map(v=>v.trim()).filter(Boolean);
+}
+async function scanFiles(files){
+  const msg=$("#scanMsg");let ok=0,fail=0;msg.textContent="⏳ Ανάγνωση barcode…";
+  for(const f of files){const r=await decodeBarcodes(f);if(r.length){ok+=r.length;const ta=$("#tagInput");ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+r.join("\n")+"\n"}else fail++}
+  $("#tagInput").dispatchEvent(new Event("input"));
+  msg.innerHTML=(ok?`✓ Διαβάστηκαν <b>${ok}</b>. Έλεγξε τον αριθμό στο πλαίσιο και συνέχισε με το επόμενο.`:"")+(fail?` ⚠ ${fail>1?fail+" φωτογραφίες δεν διαβάστηκαν":"Δεν διαβάστηκε barcode"}. Δοκίμασε πιο κοντά, ίσια, χωρίς σκιά ή γυάλισμα, ή γράψε τον αριθμό με το χέρι.`:"");
+}
+$("#btnScanCam").onclick=()=>$("#scanCam").click();$("#btnScanGal").onclick=()=>$("#scanGal").click();
+["#scanCam","#scanGal"].forEach(id=>$(id).addEventListener("change",e=>{const fs=[...e.target.files];e.target.value="";if(fs.length)scanFiles(fs)}));
 
 function renderChart(c){
   const el=$("#chart"), ws=c.ws;
