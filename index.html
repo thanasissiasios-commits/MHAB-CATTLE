@@ -463,7 +463,7 @@ const stripAcc=s=>String(s).normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase(
 function toIso(s){const m=String(s).match(/(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{4})/);if(!m)return null;const d=+m[1],mo=+m[2],y=+m[3];if(d<1||d>31||mo<1||mo>12||y<1990||y>2100)return null;return `${y}-${String(mo).padStart(2,"0")}-${String(d).padStart(2,"0")}`}
 function parseEntries(txt){
   const out=[];txt.split(/\n+/).forEach(line=>{line=line.trim();if(!line)return;
-    if(line.includes("|")){const p=line.split("|").map(x=>x.trim());const tag=normTag(p[0]);if(!tag)return;const info={};let di=0;
+    if(line.includes("|")){const p=line.split("|").map(x=>x.trim());let tag=normTag(p[0]);if(!tag)return;if(line.includes("?")&&!tag.includes("?"))tag+="?";const info={};let di=0;
       p.slice(1).forEach(f=>{if(f===""||f==="-"){if(f==="-")di++;return}const iso=toIso(f);
         if(iso){if(di===0)info.birth=iso;else info.arr=iso;di++}
         else{const u=stripAcc(f);if(/^(ΑΡΣ|Α$|♂)/.test(u))info.sex="Αρσενικό";else if(/^(ΘΗΛ|Θ$|♀)/.test(u))info.sex="Θηλυκό";else info.breed=f.toUpperCase()}});
@@ -473,7 +473,7 @@ function parseEntries(txt){
   return out.filter(e=>e.tag);
 }
 function parseTags(txt){return parseEntries(txt).map(e=>e.tag)}
-function entryLine(tag,i){i=i||{};const f=[i.birth?fd(i.birth):(i.arr?"-":""),i.sex||"",i.breed||"",i.arr?fd(i.arr):""];while(f.length&&!f[f.length-1])f.pop();return f.length?[tag,...f].join(" | "):tag}
+function entryLine(tag,i){i=i||{};const u=i._u||{};const f=[i.birth?fd(i.birth)+(u.birth?"?":""):(i.arr?"-":""),i.sex||"",i.breed||"",i.arr?fd(i.arr)+(u.arr?"?":""):""];while(f.length&&!f[f.length-1])f.pop();return f.length?[tag,...f].join(" | "):tag}
 function ageTxt(iso){const b=new Date(iso),n=new Date();let m=(n.getFullYear()-b.getFullYear())*12+n.getMonth()-b.getMonth()-(n.getDate()<b.getDate()?1:0);if(!(m>=0))return"";return m<24?`${m} μην.`:`${Math.floor(m/12)} ετών`}
 function infoTxt(i){if(!i)return"";const a=[];if(i.sex)a.push(i.sex==="Αρσενικό"?"♂":"♀");if(i.breed)a.push(esc(i.breed));if(i.birth)a.push(`γεν. ${fd(i.birth)} (${ageTxt(i.birth)})`);if(i.arr)a.push(`άφιξη ${fd(i.arr)}`);return a.join(" · ")}
 const fmtTag=t=>t.replace(/^([A-Z]{2})(\d)/,"$1 $2");
@@ -536,7 +536,9 @@ function drawRot(img,max,deg){const k=Math.min(1,max/Math.max(img.width,img.heig
   cv.width=sw?h:w;cv.height=sw?w:h;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,cv.width,cv.height);x.translate(cv.width/2,cv.height/2);x.rotate(deg*Math.PI/180);x.drawImage(img,-w/2,-h/2,w,h);return cv}
 function lev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i];for(let j=1;j<=b.length;j++)m[i][j]=i?Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1)):j}return m[a.length][b.length]}
 const BREEDS=["ΛΙΜΟΥΖΙΝ","ΣΑΡΟΛΕ","ΣΑΡΟΛΑΙ","ΜΠΛΟΝΤ ΑΚΙΤΕΝ","ΩΜΠΡΑΚ","ΟΜΠΡΑΚ","ΣΑΛΕΡ","ΣΙΜΕΝΤΑΛ","ΜΟΝΜΠΕΛΙΑΡ","ΧΟΛΣΤΑΙΝ","ΑΝΓΚΟΥΣ","ΑΓΚΟΥΣ","ΧΕΡΕΦΟΡΝΤ","ΓΚΑΣΚΟΝ","ΠΑΡΤΕΝΕΖ","ΜΠΑΖΑΝΤΕΖ","ΝΟΡΜΑΝΤ","ΔΙΑΣΤΑΥΡΩΣΗ","ΔΙΑΣΤΑΥΡΩΜΕΝΑ","ΗΜΙΑΙΜΑ","ΒΕΛΓΙΚΗ ΚΥΑΝΟΛΕΥΚΗ"];
-function snapBreed(b){if(!b)return b;const known=new Set(BREEDS);lots.forEach(l=>Object.values(l.tagInfo||{}).forEach(i=>{if(i&&i.breed)known.add(i.breed)}));
+function knownBreeds(){const known=new Set(BREEDS);lots.forEach(l=>Object.values(l.tagInfo||{}).forEach(i=>{if(i&&i.breed)known.add(i.breed)}));return known}
+const isKnownBreed=b=>!!b&&knownBreeds().has(b);
+function snapBreed(b){if(!b)return b;const known=knownBreeds();
   let best=null,bd=99;known.forEach(k=>{const d=lev(stripAcc(k),b);if(d<bd){bd=d;best=k}});return bd<=Math.max(1,Math.floor(b.length/4))?best:b}
 function ocrDate(s){const m=s.match(/(\d{2})\s?([\/.\-1lI|])\s?(\d{2})\s?([\/.\-1lI|])\s?(\d{4})/);return m?toIso(`${m[1]}/${m[3]}/${m[5]}`):null}
 function parsePassport(text){
@@ -545,9 +547,13 @@ function parsePassport(text){
   else{const sl=L.find(x=>/^\W{0,3}ΦΥΛΟ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x));
     if(sl)for(const wd of sl.split(/[^Α-Ω]+/)){if(wd.length<5||/^ΦΥΛ|^ΧΩΡΑ|^ΓΕΝΝ/.test(wd))continue;if(lev(wd,"ΑΡΣΕΝΙΚΟ")<=3){r.sex="Αρσενικό";break}if(lev(wd,"ΘΗΛΥΚΟ")<=2){r.sex="Θηλυκό";break}}}
   let bl=L.find(x=>/^\W{0,3}ΦΥΛΗ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x)&&!/ΑΡΣΕΝ|ΘΗΛΥΚ/.test(x));
-  if(bl){let v=bl.replace(/^\W{0,3}ΦΥΛ\S*/,"").split(/ΧΩΡΑ/)[0].replace(/[^Α-ΩA-Z ]/g," ").replace(/\s+/g," ").trim();if(v.length>=3)r.breed=snapBreed(v)}
-  const gl=L.find(x=>/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/.test(x));if(gl){const d=ocrDate(gl.split(/ΓΕΝΝ\S*/)[1]||"");if(d)r.birth=d}
-  const al=L.find(x=>/ΑΦΙΞ\S*\s+ΣΤΗ\S*\s+ΕΛΛ/.test(x));if(al){const d=ocrDate(al.split(/ΕΛΛ\S*/).pop()||"");if(d)r.arr=d}
+  if(bl){let v=bl.replace(/^\W{0,3}ΦΥΛ\S*/,"").split(/ΧΩΡΑ/)[0].replace(/[^Α-ΩA-Z ]/g," ").replace(/\s+/g," ").trim();if(/[Α-ΩA-Z]{4,}/.test(v))r.breed=snapBreed(v)}
+  const gl=L.find(x=>/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/.test(x));if(gl){const d=ocrDate((gl.split(/ΓΕΝΝ\S*/)[1]||"").replace(/[OΟ](?=[\d\/])|(?<=[\d\/])[OΟ]/g,"0"));if(d)r.birth=d}
+  const fixD=x=>x.replace(/[OΟ](?=[\d\/])|(?<=[\d\/])[OΟ]/g,"0");
+  let ai=L.findIndex(x=>/ΕΛΛ[ΑΛ][ΔΛΑ]/.test(x)&&/ΑΦ|ΣΤΗ/.test(x));
+  if(ai<0)ai=L.findIndex(x=>/ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ/.test(x)&&!/ΕΚ[ΜΝΠ]/.test(x));
+  if(ai>=0){const rest=L[ai].split(/ΕΛΛ\S*|ΑΦ\S{0,2}[ΞΣΖ]\S*/).pop()||"";let d=ocrDate(fixD(rest));
+    if(!d&&L[ai+1]&&!/ΓΕΝΝ|ΕΚ[ΜΝΠ]/.test(L[ai+1]))d=ocrDate(fixD(L[ai+1]));if(d)r.arr=d}
   return r;
 }
 async function ocrTagNo(img,deg){
@@ -556,11 +562,51 @@ async function ocrTagNo(img,deg){
     const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];return top?{tag:top[0],sure:top[1]>=2}:null}catch(e){return null}
 }
 let lastDeg=0;
+function flatLines(d){const o=[];(d.blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>o.push({t:stripAcc(l.text||""),b:l.bbox}))));return o}
+function cropCv(src,x,y,w,h,outW){x=Math.max(0,Math.round(x));y=Math.max(0,Math.round(y));w=Math.min(src.width-x,Math.round(w));h=Math.min(src.height-y,Math.round(h));const k=outW?outW/w:1;const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));const cx=c.getContext("2d");cx.imageSmoothingQuality="high";cx.fillStyle="#fff";cx.fillRect(0,0,c.width,c.height);cx.drawImage(src,x,y,w,h,0,0,c.width,c.height);return c}
+async function dateRecheck(w,cv,lines,re){
+  const ln=lines.find(l=>re.test(l.t));if(!ln||!ln.b)return null;const h=ln.b.y1-ln.b.y0,pad=h*0.35;
+  const c=cropCv(cv,0,ln.b.y0-pad,cv.width,h+2*pad,Math.max(cv.width,Math.min(3200,Math.round(cv.width*56/Math.max(8,h)))));
+  try{await w.setParameters({tessedit_char_whitelist:"0123456789/",tessedit_pageseg_mode:"7"});const r=await w.recognize(c);
+    const ds=[...r.data.text.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)].map(m=>toIso(m[0])).filter(Boolean);return ds}catch(e){return null}
+  finally{try{await w.setParameters({tessedit_char_whitelist:"",tessedit_pageseg_mode:"6"})}catch(e){}}
+}
 async function ocrPassport(img){
   const w=await getOCR();if(!w)return null;
-  let best=0,bc=-1;for(const deg of [0,270,90,180]){try{const r=await w.recognize(drawRot(img,800,deg));if(r.data.confidence>bc){bc=r.data.confidence;best=deg}if(bc>=45)break}catch(e){}}
+  let best=0,bc=-1;for(const deg of [0,270,90,180]){try{const r=await w.recognize(drawRot(img,Math.max(img.width,img.height)>2400?1300:800,deg));if(r.data.confidence>bc){bc=r.data.confidence;best=deg}if(bc>=45)break}catch(e){}}
   lastDeg=best;
-  try{const r=await w.recognize(drawRot(img,1600,best));return parsePassport(r.data.text)}catch(e){return null}
+  try{
+    const nat=Math.min(4200,Math.max(img.width,img.height));
+    const cv1=drawRot(img,1600,best);const r1=await w.recognize(cv1,{},{blocks:true});let info=parsePassport(r1.data.text);let lines=flatLines(r1.data),cv=cv1;
+    // zoom into the "στοιχεία βοοειδούς" block at full resolution when the photo has more detail than the first pass used
+    const marks=lines.filter(l=>l.b&&/^\W{0,3}ΦΥΛ|ΧΡΩΜΑ|ΚΑΤΕΥΘ|ΓΕΝΝΗΣ|ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ|ΒΟΟΕΙΔ|ΠΡΟΕΛΕΥΣ/.test(l.t));
+    if(marks.length>=2){
+      const k=nat/Math.max(cv1.width,cv1.height);const lh=marks.reduce((a,l)=>a+(l.b.y1-l.b.y0),0)/marks.length;
+      const y0=Math.min(...marks.map(l=>l.b.y0))-lh*1.5,y1=Math.max(...marks.map(l=>l.b.y1))+lh*2.5;
+      const full=k>1.15?drawRot(img,nat,best):cv1,kk=full.width/cv1.width;
+      const reg=cropCv(full,0,y0*kk,full.width,(y1-y0)*kk,Math.min(2600,Math.max(1800,full.width)));
+      const r2=await w.recognize(reg,{},{blocks:true});const i2=parsePassport(r2.data.text);
+      const unsure={};["birth","arr"].forEach(f=>{if(info[f]&&i2[f]&&info[f]!==i2[f])unsure[f]=1});
+      const b1=info.breed;info=Object.assign({},info,i2);if(isKnownBreed(b1)&&!isKnownBreed(i2.breed))info.breed=b1;lines=flatLines(r2.data);cv=reg;info._u=unsure;
+    }
+    else if(nat>1900){const big=drawRot(img,Math.min(nat,2800),best);const r2=await w.recognize(big,{},{blocks:true});const i2=parsePassport(r2.data.text);
+      if(Object.keys(i2).length>=Object.keys(info).length){const b1=info.breed;info=Object.assign({},info,i2);if(isKnownBreed(b1)&&!isKnownBreed(i2.breed))info.breed=b1;lines=flatLines(r2.data);cv=big}}
+    // re-read the two date lines alone, digits only, and compare
+    const u=info._u||{};delete info._u;
+    for(const [f,re] of [["birth",/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/],["arr",/ΕΛΛ[ΑΛ][ΔΛΑ]|ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ(?!.*ΕΚ[ΜΝΠ])/]]){
+      const ds=await dateRecheck(w,cv,lines,re);if(!ds||!ds.length)continue;
+      if(!info[f]){info[f]=ds[ds.length-1];u[f]=1}else if(!ds.includes(info[f]))u[f]=1}
+    if(!isKnownBreed(info.breed)){const ln=lines.find(l=>/^\W{0,3}ΦΥΛΗ/.test(l.t))||lines.find(l=>/^\W{0,3}ΦΥΛ/.test(l.t)&&!/ΑΡΣΕΝ|ΘΗΛΥΚ/.test(l.t));
+      if(ln&&ln.b){const h=ln.b.y1-ln.b.y0,pad=h*0.35;const c=cropCv(cv,0,ln.b.y0-pad,cv.width*0.6,h+2*pad,Math.min(3200,Math.round(cv.width*0.6*56/Math.max(8,h))));
+        try{await w.setParameters({tessedit_pageseg_mode:"7"});const r=await w.recognize(c);const b=parsePassport(r.data.text).breed;if(b&&(isKnownBreed(b)||!info.breed))info.breed=b}catch(e){}finally{try{await w.setParameters({tessedit_pageseg_mode:"6"})}catch(e){}}}}
+    info._u=u;return info}catch(e){return null}
+}
+async function decodeHi(img,deg){
+  const cv=drawRot(img,Math.min(4200,Math.max(img.width,img.height)),deg);let out=[];
+  if("BarcodeDetector" in window){try{out=(await new BarcodeDetector().detect(cv)).map(x=>x.rawValue).filter(Boolean)}catch(e){}}
+  if(!out.length&&await loadZX()){const Z=window.ZXing,hints=new Map();hints.set(Z.DecodeHintType.TRY_HARDER,true);hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.ITF,Z.BarcodeFormat.CODE_39]);const rd=new Z.MultiFormatReader();rd.setHints(hints);
+    for(const src of [cv,cropCv(cv,0,0,cv.width,cv.height*0.5)]){try{const r=rd.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(src))));if(r&&r.getText()){out=[r.getText()];break}}catch(e){}}}
+  return out.map(v=>v.trim()).filter(Boolean);
 }
 let pdfLoad=null;
 function getPDF(){if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);if(!pdfLoad)pdfLoad=loadScript("pdf.min.js").then(ok=>{if(!ok||!window.pdfjsLib){pdfLoad=null;return null}pdfjsLib.GlobalWorkerOptions.workerSrc=absU("pdf.worker.min.js");return pdfjsLib});return pdfLoad}
@@ -579,21 +625,22 @@ async function scanFiles(files){
   await scanJobs(jobs,pdfFail);
 }
 async function scanJobs(files,pdfFail){
-  const msg=$("#scanMsg");let ok=0,noTag=0,noInfo=0,n=0,fromTxt=0;
+  const msg=$("#scanMsg");let ok=0,noTag=0,noInfo=0,n=0,fromTxt=0,nUns=0;
   for(const job of files){n++;msg.textContent=`⏳ Ανάγνωση διαβατηρίου${files.length>1?` ${n}/${files.length}`:""}… (την πρώτη φορά αργεί λίγο)`;
     let img=null;try{img=await job()}catch(e){}if(!img)continue;
     const codes=await decodeBarcodes(img);let info=null;
-    try{info=await ocrPassport(img);
+    try{info=await ocrPassport(img);if(!codes.length&&info){const hi=await decodeHi(img,lastDeg);hi.forEach(c=>codes.push(c))}
       if(!codes.length&&info){const t=await ocrTagNo(img,lastDeg);if(t){codes.push(t.tag+(t.sure?"":"?"));fromTxt++}}
       }catch(e){}
-    const has=info&&Object.keys(info).length;if(!has)noInfo++;
+    const has=info&&Object.keys(info).some(k=>k!=="_u");if(!has)noInfo++;const unsure=info&&info._u&&Object.keys(info._u).length;if(unsure)nUns++;
     if(!codes.length&&!has)continue;
-    const tag=codes[0]||"???";if(tag.includes("?"))noTag++;else ok++;
+    const tag=codes[0]||"???";if(tag.includes("?"))noTag++;else if(!unsure)ok++;
     const ta=$("#tagInput");ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+entryLine(tag,info)+"\n"}
   $("#tagInput").dispatchEvent(new Event("input"));
-  const bad=files.length-ok-noTag;
+  const bad=files.length-ok-noTag-nUns;
   msg.innerHTML=(ok?`✓ Διαβάστηκαν <b>${ok}</b>. Έλεγξε τα στοιχεία στο πλαίσιο (ενώτιο | γέννηση | φύλο | φυλή | άφιξη) και διόρθωσε ό,τι χρειάζεται.`:"")
     +(fromTxt?` ℹ️ Σε ${fromTxt} το barcode δεν διαβάστηκε και ο αριθμός πάρθηκε από το τυπωμένο κείμενο: έλεγξέ τον προσεκτικά.`:"")
+    +(nUns?` ⚠ Σε ${nUns} μια ημερομηνία δεν διαβάστηκε με σιγουριά και έχει «?»: σύγκρινέ τη με το διαβατήριο, διόρθωσέ τη και σβήσε το «?».`:"")
     +(noTag?` ⚠ Σε ${noTag} ο αριθμός ενωτίου έχει «?»: διόρθωσέ τον και σβήσε το «?» για να αποθηκευτεί.`:"")
     +(bad>0?` ⚠ ${bad} ${files.length>1?"σελίδες/φωτογραφίες":""} δεν διαβάστηκαν καθόλου.`:"")+(pdfFail?` ⚠ ${pdfFail} PDF δεν άνοιξαν.`:"")
     +(ok&&noInfo&&!bad?` Τα υπόλοιπα στοιχεία δεν διαβάστηκαν σε ${noInfo}· συμπλήρωσέ τα με το χέρι αν θέλεις.`:"");
