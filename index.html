@@ -262,6 +262,15 @@ svg text{fill:var(--mute);font-size:11px}
     <input type="file" id="scanGal" accept="image/*,application/pdf,.pdf" multiple class="hide">
   </div>
   <p class="note" id="scanMsg">Φωτογράφισε ή διάλεξε σκαναρισμένο το πάνω μέρος του διαβατηρίου (barcode και στοιχεία βοοειδούς). Περνάνε αυτόματα ενώτιο, γέννηση, φύλο, φυλή και άφιξη στην Ελλάδα, για έλεγχο πριν την αποθήκευση.</p>
+  <div style="border-top:1px dashed var(--line);margin-top:8px;padding-top:8px">
+    <label>Συμπλήρωση όπου λείπει (ίδια για όλη τη φόρτωση)</label>
+    <div class="row">
+      <input type="date" id="fillArr" title="Ημ. άφιξης στην Ελλάδα" style="flex:1;min-width:130px">
+      <select id="fillSex" style="flex:1;min-width:100px"><option value="">Φύλο —</option><option>Αρσενικό</option><option>Θηλυκό</option></select>
+      <input id="fillBreed" placeholder="Φυλή" style="flex:1;min-width:100px">
+      <button type="button" class="sm" id="btnFill">Συμπλήρωση κενών</button>
+    </div>
+  </div>
   <p class="note" id="tagPrev"></p>
   <div class="row"><span class="sp"></span><button type="button" data-close>Άκυρο</button><button class="pri" id="btnSaveTags">Προσθήκη</button></div>
 </div></div>
@@ -526,7 +535,7 @@ $("#tagFilter").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);i
 $("#btnAddTags").onclick=()=>{window._edTag=null;$("#tagInput").value="";$("#tagPrev").textContent="";open("#mTags");setTimeout(()=>$("#tagInput").focus(),50)};
 $("#tagInput").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);const ents=parseEntries($("#tagInput").value);const n=ents.map(e=>e.tag);const ex=new Set(l.tags||[]);const nw=[...new Set(n)].filter(t=>!ex.has(t)&&!t.includes("?"));const upd=ents.filter(e=>ex.has(e.tag)&&Object.keys(e.info).length).length;const qm=n.filter(t=>t.includes("?")).length;
   const other=nw.map(t=>[t,lots.find(o=>o.id!==l.id&&(o.tags||[]).includes(t))]).filter(x=>x[1]);
-  $("#tagPrev").innerHTML=n.length?`Νέα: <b>${nw.length}</b>`+(upd?` · ενημερώνονται ${upd}`:"")+(n.length-nw.length-upd>0?` · παραλείπονται ${n.length-nw.length-upd} διπλά`:"")+(qm?`<br>⚠ ${qm} γραμμές με «?» δεν θα αποθηκευτούν`:"")+(other.length?`<br>⚠ ${other.length} υπάρχουν ήδη σε άλλη παρτίδα: `+other.slice(0,5).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1].name)})`).join(", "):""):""});
+  $("#tagPrev").innerHTML=n.length?`Νέα: <b>${nw.length}</b>`+(upd?` · ενημερώνονται ${upd}`:"")+(n.length-nw.length-upd-qm>0?` · παραλείπονται ${n.length-nw.length-upd-qm} διπλά`:"")+(qm?`<br>⚠ ${qm} γραμμές με «?» δεν θα αποθηκευτούν`:"")+(other.length?`<br>⚠ ${other.length} υπάρχουν ήδη σε άλλη παρτίδα: `+other.slice(0,5).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1].name)})`).join(", "):""):""});
 $("#btnSaveTags").onclick=()=>{const l=lots.find(x=>x.id===cur);const ex=l.tags||[];const set=new Set(ex);let add=0,upd=0;const ti=l.tagInfo||{};const dupIn=[],dupOther=[],seen=new Set(),wasEd=window._edTag;
   parseEntries($("#tagInput").value).forEach(e=>{const t=e.tag;if(t.includes("?"))return;const isNew=!set.has(t);
     if(isNew){const o=otherLotOf(l,t);if(o)dupOther.push(`${fmtTag(t)} (${o})`)}else if(t!==wasEd&&!dupIn.includes(fmtTag(t))&&(seen.has(t)||!Object.keys(e.info).length||JSON.stringify(Object.assign({},ti[t],e.info))===JSON.stringify(ti[t]||{})))dupIn.push(fmtTag(t));
@@ -575,7 +584,7 @@ function getOCR(lang){lang=lang||"ell";
 function drawRot(img,max,deg){const k=Math.min(1,max/Math.max(img.width,img.height));const w=Math.round(img.width*k),h=Math.round(img.height*k);const cv=document.createElement("canvas");const sw=deg%180!==0;
   cv.width=sw?h:w;cv.height=sw?w:h;const x=cv.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,cv.width,cv.height);x.translate(cv.width/2,cv.height/2);x.rotate(deg*Math.PI/180);x.drawImage(img,-w/2,-h/2,w,h);return cv}
 function lev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i];for(let j=1;j<=b.length;j++)m[i][j]=i?Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1)):j}return m[a.length][b.length]}
-const BREEDS=["ΛΙΜΟΥΖΙΝ","ΣΑΡΟΛΕ","ΣΑΡΟΛΑΙ","ΜΠΛΟΝΤ ΑΚΙΤΕΝ","ΩΜΠΡΑΚ","ΟΜΠΡΑΚ","ΣΑΛΕΡ","ΣΙΜΕΝΤΑΛ","ΜΟΝΜΠΕΛΙΑΡ","ΧΟΛΣΤΑΙΝ","ΑΝΓΚΟΥΣ","ΑΓΚΟΥΣ","ΧΕΡΕΦΟΡΝΤ","ΓΚΑΣΚΟΝ","ΠΑΡΤΕΝΕΖ","ΜΠΑΖΑΝΤΕΖ","ΝΟΡΜΑΝΤ","ΔΙΑΣΤΑΥΡΩΣΗ","ΔΙΑΣΤΑΥΡΩΜΕΝΑ","ΗΜΙΑΙΜΑ","ΒΕΛΓΙΚΗ ΚΥΑΝΟΛΕΥΚΗ"];
+const BREEDS=["ΓΚΡΟΑΣΕ","ΛΙΜΟΥΖΙΝ","ΣΑΡΟΛΕ","ΣΑΡΟΛΑΙ","ΜΠΛΟΝΤ ΑΚΙΤΕΝ","ΩΜΠΡΑΚ","ΟΜΠΡΑΚ","ΣΑΛΕΡ","ΣΙΜΕΝΤΑΛ","ΜΟΝΜΠΕΛΙΑΡ","ΧΟΛΣΤΑΙΝ","ΑΝΓΚΟΥΣ","ΑΓΚΟΥΣ","ΧΕΡΕΦΟΡΝΤ","ΓΚΑΣΚΟΝ","ΠΑΡΤΕΝΕΖ","ΜΠΑΖΑΝΤΕΖ","ΝΟΡΜΑΝΤ","ΔΙΑΣΤΑΥΡΩΣΗ","ΔΙΑΣΤΑΥΡΩΜΕΝΑ","ΗΜΙΑΙΜΑ","ΒΕΛΓΙΚΗ ΚΥΑΝΟΛΕΥΚΗ"];
 function knownBreeds(){const known=new Set(BREEDS);lots.forEach(l=>Object.values(l.tagInfo||{}).forEach(i=>{if(i&&i.breed)known.add(i.breed)}));return known}
 const isKnownBreed=b=>!!b&&knownBreeds().has(b);
 function snapBreed(b){if(!b)return b;const known=knownBreeds();
@@ -585,7 +594,7 @@ function parsePassport(text){
   const L=text.split(/\n/).map(stripAcc),r={},all=L.join("\n");
   if(/ΑΡΣΕΝ/.test(all))r.sex="Αρσενικό";else if(/ΘΗΛΥΚ/.test(all))r.sex="Θηλυκό";
   else{const sl=L.find(x=>/^\W{0,3}ΦΥΛΟ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x));
-    if(sl)for(const wd of sl.split(/[^Α-Ω]+/)){if(wd.length<5||/^ΦΥΛ|^ΧΩΡΑ|^ΓΕΝΝ/.test(wd))continue;if(lev(wd,"ΑΡΣΕΝΙΚΟ")<=3){r.sex="Αρσενικό";break}if(lev(wd,"ΘΗΛΥΚΟ")<=2){r.sex="Θηλυκό";break}}}
+    if(sl)for(const wd of sl.split(/[^Α-Ω]+/)){if(wd.length<5||/^ΦΥΛ|^ΧΩΡΑ|^ΓΕΝΝ/.test(wd))continue;if(lev(wd,"ΑΡΣΕΝΙΚΟ")<=3){r.sex="Αρσενικό";break}if(lev(wd,"ΘΗΛΥΚΟ")<=1){r.sex="Θηλυκό";break}}}
   let bl=L.find(x=>/^\W{0,3}ΦΥΛΗ/.test(x))||L.find(x=>/^\W{0,3}ΦΥΛ/.test(x)&&!/ΑΡΣΕΝ|ΘΗΛΥΚ/.test(x));
   if(bl){let v=bl.replace(/^\W{0,3}ΦΥΛ\S*/,"").split(/ΧΩΡΑ/)[0].replace(/[^Α-ΩA-Z ]/g," ").replace(/\s+/g," ").trim();if(/[Α-ΩA-Z]{4,}/.test(v))r.breed=snapBreed(v)}
   const gl=L.find(x=>/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/.test(x));if(gl){const d=ocrDate((gl.split(/ΓΕΝΝ\S*/)[1]||"").replace(/[OΟ](?=[\d\/])|(?<=[\d\/])[OΟ]/g,"0"));if(d)r.birth=d}
@@ -598,93 +607,158 @@ function parsePassport(text){
 }
 async function ocrTagNo(img,deg){
   const w=await getOCR("eng");if(!w)return null;
-  try{const r=await w.recognize(drawRot(img,1600,deg));const cnt={};(r.data.text.match(/[A-Z]{2}\s?[0-9O]{9,12}\b/g)||[]).forEach(m=>{m=m.replace(/\s/g,"");m=m.slice(0,2)+m.slice(2).replace(/O/g,"0");cnt[m]=(cnt[m]||0)+1});
-    const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];return top?{tag:top[0],sure:top[1]>=2}:null}catch(e){return null}
+  try{const src=drawRot(img,Math.min(2600,Math.max(img.width,img.height)),deg);const r=await w.recognize(cropCv(src,0,0,src.width,src.height*0.45));const cnt={};
+    (r.data.text.match(/[A-Z]{2}\s?[0-9O]{9,12}\b/g)||[]).forEach(m=>{m=m.replace(/\s/g,"");m=m.slice(0,2)+m.slice(2).replace(/O/g,"0");cnt[m]=(cnt[m]||0)+1});
+    const c=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);return c.length?{tag:c[0][0],sure:c[0][1]>=2&&(c.length<2||c[1][1]<c[0][1]),cands:c}:null}catch(e){return null}
 }
 let lastDeg=0;
-function flatLines(d){const o=[];(d.blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>o.push({t:stripAcc(l.text||""),b:l.bbox}))));return o}
-function cropCv(src,x,y,w,h,outW){x=Math.max(0,Math.round(x));y=Math.max(0,Math.round(y));w=Math.min(src.width-x,Math.round(w));h=Math.min(src.height-y,Math.round(h));const k=outW?outW/w:1;const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));const cx=c.getContext("2d");cx.imageSmoothingQuality="high";cx.fillStyle="#fff";cx.fillRect(0,0,c.width,c.height);cx.drawImage(src,x,y,w,h,0,0,c.width,c.height);return c}
-async function dateRecheck(w,cv,lines,re){
-  const ln=lines.find(l=>re.test(l.t));if(!ln||!ln.b)return null;const h=ln.b.y1-ln.b.y0,pad=h*0.35;
-  const c=cropCv(cv,0,ln.b.y0-pad,cv.width,h+2*pad,Math.max(cv.width,Math.min(3200,Math.round(cv.width*56/Math.max(8,h)))));
-  try{await w.setParameters({tessedit_char_whitelist:"0123456789/",tessedit_pageseg_mode:"7"});const r=await w.recognize(c);
-    const ds=[...r.data.text.matchAll(/(\d{2})\/(\d{2})\/(\d{4})/g)].map(m=>toIso(m[0])).filter(Boolean);return ds}catch(e){return null}
-  finally{try{await w.setParameters({tessedit_char_whitelist:"",tessedit_pageseg_mode:"6"})}catch(e){}}
-}
+function flatLines(d){const o=[];(d.blocks||[]).forEach(b=>(b.paragraphs||[]).forEach(p=>(p.lines||[]).forEach(l=>o.push({t:stripAcc(l.text||""),b:l.bbox,w:(l.words||[]).map(x=>({t:stripAcc(x.text||""),b:x.bbox}))}))));return o}
+function cropCv(src,x,y,w,h,outW){x=Math.max(0,Math.round(x));y=Math.max(0,Math.round(y));w=Math.max(1,Math.min(src.width-x,Math.round(w)));h=Math.max(1,Math.min(src.height-y,Math.round(h)));const k=outW?outW/w:1;const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*k));c.height=Math.max(1,Math.round(h*k));const cx=c.getContext("2d");cx.imageSmoothingQuality="high";cx.fillStyle="#fff";cx.fillRect(0,0,c.width,c.height);cx.drawImage(src,x,y,w,h,0,0,c.width,c.height);return c}
+/* black-and-white scans turn the grey watermark into a checkerboard of single dots: drop every dark pixel that has fewer than two dark neighbours */
+function dedither(cv,passes){
+  const w=cv.width,h=cv.height,x=cv.getContext("2d"),d=x.getImageData(0,0,w,h),a=d.data,N=w*h;let b=new Uint8Array(N),mid=0;
+  for(let i=0,j=0;j<N;i+=4,j++){const v=(a[i]+a[i+1]+a[i+2])/3;if(v>50&&v<205)mid++;b[j]=v<128?1:0}
+  if(mid/N>0.1)return cv; // not a bilevel scan
+  for(let p=0;p<(passes||2);p++){const o=new Uint8Array(N);for(let y=1;y<h-1;y++){const r=y*w;for(let xx=1;xx<w-1;xx++){const j=r+xx;if(b[j]&&b[j-1]+b[j+1]+b[j-w]+b[j+w]>=2)o[j]=1}}b=o}
+  const c=document.createElement("canvas");c.width=w;c.height=h;const cx=c.getContext("2d"),od=cx.createImageData(w,h),q=od.data;for(let j=0,i=0;j<N;j++,i+=4){const v=b[j]?0:255;q[i]=q[i+1]=q[i+2]=v;q[i+3]=255}cx.putImageData(od,0,0);return c}
+const KEYS=[/ΦΥΛΟ|ΦΥΛΗ/,/ΓΕΝΝΗΣ/,/ΧΩΡΑ/,/ΚΑΤΟΧ/,/ΣΤΟΙΧΕΙΑ/,/ΒΟΟΕΙΔ/,/ΠΡΟΕΛΕΥΣ/,/ΧΡΩΜΑ/,/ΚΑΤΕΥΘ/,/ΕΛΛΑΔ|ΕΛΛΗΝ/];
+const keyHits=t=>{const s=stripAcc(t);return KEYS.reduce((n,re)=>n+(re.test(s)?1:0),0)};
+function lenientDate(s){s=s.replace(/[OΟ]/g,"0").replace(/\s/g,"");let m=s.match(/(\d{2})\/(\d{2})\/(\d{4})/);if(m)return{d:toIso(m[0]),sure:true};
+  m=s.match(/(\d{2})\D?(\d{2})\D?(\d{4})/)||s.match(/(\d{2}).(\d{2})\/(\d{4})/)||s.match(/(\d{2})\/(\d{2}).(\d{4})/);if(m){const d=toIso(`${m[1]}/${m[2]}/${m[3]}`);if(d)return{d,sure:false}}return null}
+async function readLine(w,c,digits){try{await w.setParameters(digits?{tessedit_char_whitelist:"0123456789/",tessedit_pageseg_mode:"7"}:{tessedit_pageseg_mode:"7"});return (await w.recognize(c)).data.text||""}catch(e){return""}
+  finally{try{await w.setParameters({tessedit_char_whitelist:"",tessedit_pageseg_mode:"6"})}catch(e){}}}
+const dbg=(...a)=>{if(window._ocrDbg)console.log("DBG",...a)};
 async function ocrPassport(img){
   const w=await getOCR();if(!w)return null;
-  let best=0,bc=-1;for(const deg of [0,270,90,180]){try{const r=await w.recognize(drawRot(img,Math.max(img.width,img.height)>2400?1300:800,deg));if(r.data.confidence>bc){bc=r.data.confidence;best=deg}if(bc>=45)break}catch(e){}}
-  lastDeg=best;
   try{
-    const nat=Math.min(4200,Math.max(img.width,img.height));
-    const cv1=drawRot(img,1600,best);const r1=await w.recognize(cv1,{},{blocks:true});let info=parsePassport(r1.data.text);let lines=flatLines(r1.data),cv=cv1;
-    // zoom into the "στοιχεία βοοειδούς" block at full resolution when the photo has more detail than the first pass used
-    const marks=lines.filter(l=>l.b&&/^\W{0,3}ΦΥΛ|ΧΡΩΜΑ|ΚΑΤΕΥΘ|ΓΕΝΝΗΣ|ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ|ΒΟΟΕΙΔ|ΠΡΟΕΛΕΥΣ/.test(l.t));
+    // 1. orientation: last one that worked first; judged by the labels it finds
+    const big=Math.max(img.width,img.height),oS=big>=1300?1300:big;let best=null;
+    for(const deg of [lastDeg,...[0,270,90,180].filter(d=>d!==lastDeg)]){let r;try{r=await w.recognize(drawRot(img,oS,deg),{},{blocks:true})}catch(e){continue}
+      const sc=keyHits(r.data.text)*100+r.data.confidence;if(!best||sc>best.sc)best={sc,deg,r};if(keyHits(r.data.text)>=3)break}
+    if(!best)return null;lastDeg=best.deg;
+    let info=parsePassport(best.r.data.text),lines=flatLines(best.r.data);const cv1=drawRot(img,oS,best.deg);let cv=cv1,below=null;const u={};
+    // 2. re-read the "στοιχεία βοοειδούς" block at the photo's own resolution
+    const nat=Math.min(4200,big);let marks=lines.filter(l=>l.b&&!/ΕΚ[ΜΝΠ]ΕΤ|ΚΑΤΟΧ|ΜΗΤΡΩ|ΑΝΑΧ/.test(l.t)&&/^\W{0,3}ΦΥΛ|^\W{0,3}ΧΡΩΜΑ|ΚΑΤΕΥΘ|ΜΕΡ\S{0,3}\s*ΓΕΝΝΗΣ|ΣΤΗ\S*\s+ΕΛΛ[ΑΛ]|ΣΤΟΙΧΕΙΑ\s+ΒΟΟ|ΠΡΟΕΛΕΥΣ/.test(l.t)).map(l=>{const x=l.w.find(x=>x.b&&/ΦΥΛ|ΧΡΩΜΑ|ΚΑΤΕΥΘ|ΓΕΝΝΗΣ|ΕΛΛ[ΑΛ]|ΣΤΟΙΧΕΙΑ|ΠΡΟΕΛΕΥΣ/.test(x.t)&&(x.b.y1-x.b.y0)<cv1.width*0.04);return x?{b:x.b}:(l.b.y1-l.b.y0)<cv1.width*0.04?{b:l.b}:null}).filter(Boolean);dbg("marks",marks.length,keyHits(best.r.data.text),best.deg,JSON.stringify(info));
+    if(marks.length>=2){const ys=marks.map(l=>l.b.y0).sort((a,b)=>a-b),md=ys[Math.floor(ys.length/2)],lh0=marks.reduce((a,l)=>a+(l.b.y1-l.b.y0),0)/marks.length;marks=marks.filter(l=>Math.abs(l.b.y0-md)<lh0*8)}
     if(marks.length>=2){
-      const k=nat/Math.max(cv1.width,cv1.height);const lh=marks.reduce((a,l)=>a+(l.b.y1-l.b.y0),0)/marks.length;
-      const y0=Math.min(...marks.map(l=>l.b.y0))-lh*1.5,y1=Math.max(...marks.map(l=>l.b.y1))+lh*2.5;
-      const full=k>1.15?drawRot(img,nat,best):cv1,kk=full.width/cv1.width;
+      const lh=marks.reduce((a,l)=>a+(l.b.y1-l.b.y0),0)/marks.length;const y0=Math.min(...marks.map(l=>l.b.y0))-lh*1.5,y1=Math.max(...marks.map(l=>l.b.y1))+lh*2.5;
+      const full=nat/oS>1.1?drawRot(img,nat,best.deg):cv1,kk=full.width/cv1.width;
       const reg=cropCv(full,0,y0*kk,full.width,(y1-y0)*kk,Math.min(2600,Math.max(1800,full.width)));
       const r2=await w.recognize(reg,{},{blocks:true});const i2=parsePassport(r2.data.text);
-      const unsure={};["birth","arr"].forEach(f=>{if(info[f]&&i2[f]&&info[f]!==i2[f])unsure[f]=1});
-      const b1=info.breed;info=Object.assign({},info,i2);if(isKnownBreed(b1)&&!isKnownBreed(i2.breed))info.breed=b1;lines=flatLines(r2.data);cv=reg;info._u=unsure;
+      ["birth","arr"].forEach(f=>{if(info[f]&&i2[f]&&info[f]!==i2[f])u[f]=1});
+      const b1=info.breed;info=Object.assign({},info,i2);if(isKnownBreed(b1)&&!isKnownBreed(i2.breed))info.breed=b1;lines=flatLines(r2.data);cv=reg;below={full,y:y1*kk,h:lh*kk*9};
     }
-    else if(nat>1900){const big=drawRot(img,Math.min(nat,2800),best);const r2=await w.recognize(big,{},{blocks:true});const i2=parsePassport(r2.data.text);
-      if(Object.keys(i2).length>=Object.keys(info).length){const b1=info.breed;info=Object.assign({},info,i2);if(isKnownBreed(b1)&&!isKnownBreed(i2.breed))info.breed=b1;lines=flatLines(r2.data);cv=big}}
-    // re-read the two date lines alone, digits only, and compare
-    const u=info._u||{};delete info._u;
-    for(const [f,re] of [["birth",/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/],["arr",/ΕΛΛ[ΑΛ][ΔΛΑ]|ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ(?!.*ΕΚ[ΜΝΠ])/]]){
-      const ds=await dateRecheck(w,cv,lines,re);if(!ds||!ds.length)continue;
-      if(!info[f]){info[f]=ds[ds.length-1];u[f]=1}else if(!ds.includes(info[f]))u[f]=1}
-    if(!isKnownBreed(info.breed)){const ln=lines.find(l=>/^\W{0,3}ΦΥΛΗ/.test(l.t))||lines.find(l=>/^\W{0,3}ΦΥΛ/.test(l.t)&&!/ΑΡΣΕΝ|ΘΗΛΥΚ/.test(l.t));
-      if(ln&&ln.b){const h=ln.b.y1-ln.b.y0,pad=h*0.35;const c=cropCv(cv,0,ln.b.y0-pad,cv.width*0.6,h+2*pad,Math.min(3200,Math.round(cv.width*0.6*56/Math.max(8,h))));
-        try{await w.setParameters({tessedit_pageseg_mode:"7"});const r=await w.recognize(c);const b=parsePassport(r.data.text).breed;if(b&&(isKnownBreed(b)||!info.breed))info.breed=b}catch(e){}finally{try{await w.setParameters({tessedit_pageseg_mode:"6"})}catch(e){}}}}
-    info._u=u;return info}catch(e){return null}
+    // 3. read each value on its own: crop just that cell
+    const W=cv.width;
+    const cell=(re,side,ware)=>{const ln=lines.find(l=>l.b&&re.test(l.t));if(!ln)return null;
+      const aw=ln.w.find(x=>x.b&&ware.test(x.t)&&(side==="R"||x.b.x0<W*0.3))||null;const bb=aw?aw.b:ln.b;if(!aw&&(ln.b.y1-ln.b.y0)>W*0.04)return null;
+      const h=Math.max(8,bb.y1-bb.y0),pad=h*0.45;let x0,x1;
+      if(side==="L"){const col=ln.w.find(x=>x.b&&x.b.x0>W*0.3&&/^(ΧΩΡΑ|ΣΗΜΑΝΣ|ΑΤΟΜ|ΑΡ\b)/.test(x.t));x1=col?col.b.x0-h*0.5:W*0.5;x0=aw?aw.b.x1+h*0.3:W*0.2;
+        const nx=ln.w.filter(x=>x.b&&x.b.x0>=x0-2&&x.b.x0<W*0.24&&/ΚΑΤΕΥΘ|ΓΕΝΝ/.test(x.t)).pop();if(nx)x0=nx.b.x1+h*0.3;if(x1-x0<h*3){x0=W*0.2;x1=W*0.5}}
+      else{x0=aw?aw.b.x1+h*0.3:W*0.72;x1=W}
+      return cropCv(cv,x0,bb.y0-pad,x1-x0,h+2*pad,Math.round((x1-x0)*Math.max(1,60/h)))};
+    let arrDigits="";
+    for(const [f,re,side,ware] of [["birth",/ΜΕΡ\S{0,3}\s*ΓΕΝΝ/,"L",/ΓΕΝΝ/],["arr",/ΕΛΛ[ΑΛ][ΔΛΑ]|ΑΦ\S{0,2}[ΞΣΖ]\S*\s+ΣΤ(?!.*ΕΚ[ΜΝΠ])/,"R",/ΕΛΛ[ΑΛ][ΔΛΑ]/]]){
+      const c=cell(re,side,ware);if(!c)continue;const t=await readLine(w,c,true);dbg(f,JSON.stringify(t),info[f]);const ld=lenientDate(t),dg=t.replace(/\D/g,"");
+      if(f==="arr")arrDigits=dg;
+      if(ld&&ld.d&&ld.sure){if(!info[f])info[f]=ld.d;else if(info[f]!==ld.d)u[f]=1}
+      else if(!info[f]&&ld&&ld.d){info[f]=ld.d;u[f]=1}}
+    // the date of arrival at the holding is printed again further down and is usually clear of the watermark
+    let farm=null;
+    if((!info.arr||u.arr)&&below){try{const hc=cropCv(below.full,0,below.y,below.full.width,below.h,Math.min(2600,Math.max(1800,below.full.width)));const rr=await w.recognize(hc);
+      const fl=stripAcc(rr.data.text).split(/\n/).find(x=>/\d{2}.\d{2}.\d{4}.{0,12}(ΑΝΑΧ|ΑΠΟ ΤΗΝ)|ΕΚ[ΜΝΠ]ΕΤ\S*\s*\W{0,3}\d{2}.\d{2}.\d{4}/.test(x));
+      if(fl){const ds=[...fl.split(/ΑΝΑΧ|ΑΠΟ ΤΗΝ/)[0].replace(/[OΟ](?=[\d\/])|(?<=[\d\/])[OΟ]/g,"0").matchAll(/\d{2}\/\d{2}\/\d{4}/g)].map(m=>toIso(m[0])).filter(Boolean);farm=ds.pop()||null}dbg("farm",farm,arrDigits,fl,"||",stripAcc(rr.data.text).split(/\n/).filter(x=>/\d{4}/.test(x)).join(" ## "))}catch(e){}}
+    if(farm){const fdg=farm.slice(8,10)+farm.slice(5,7)+farm.slice(0,4);
+      if(!info.arr||u.arr){const ad=arrDigits.slice(-8);if(ad.length>=6&&fdg.endsWith(ad)){info.arr=farm;if(ad.length>=7)delete u.arr;else u.arr=1}else if(!info.arr){info.arr=farm;u.arr=1}}}
+    if(!info.sex){const c=cell(/^\W{0,3}ΦΥΛΟ/,"L",/^\W{0,2}ΦΥΛΟ/)||cell(/^\W{0,3}ΦΥΛ/,"L",/^\W{0,2}ΦΥΛ/);if(c){const t=stripAcc(await readLine(w,c)).replace(/[^Α-ΩA-Z]/g,"");dbg("sex",t);if(t.length>=4){const a=lev(t,"ΑΡΣΕΝΙΚΟ"),b=lev(t,"ΘΗΛΥΚΟ");if(a<=4&&a+2<=b)info.sex="Αρσενικό";else if(b<=1)info.sex="Θηλυκό"}}}
+    if(!isKnownBreed(info.breed)){const bre=lines.some(l=>/^\W{0,3}ΦΥΛΗ/.test(l.t))?/^\W{0,3}ΦΥΛΗ/:/^\W{0,3}ΦΥΛ(?!Ο)/;const c=cell(bre,"L",/^\W{0,2}ΦΥΛ/);dbg("breed cell",!!c);
+      if(c){const t=stripAcc(await readLine(w,c)).replace(/[^Α-ΩA-Z ]/g," ").replace(/\s+/g," ").trim();dbg("breed",t);const b=/[Α-ΩA-Z]{4,}/.test(t)?snapBreed(t):null;
+        if(isKnownBreed(b))info.breed=b;else if(info.breed&&!(b&&lev(stripAcc(b),stripAcc(info.breed))<=2))delete info.breed;else if(!info.breed&&b)info.breed=b}
+      else if(info.breed)delete info.breed}
+    info._u=u;info._ad=arrDigits;info._farm=farm;return info}catch(e){dbg("ERR",e&&e.message,e&&e.stack);return null}
 }
+function zxRead(cv){const Z=window.ZXing;if(!Z)return null;if(!zxRead.rd){const hints=new Map();hints.set(Z.DecodeHintType.TRY_HARDER,true);hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]);zxRead.rd=new Z.MultiFormatReader();zxRead.rd.setHints(hints)}
+  try{const r=zxRead.rd.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));return r&&r.getText()?r.getText().trim():null}catch(e){return null}}
+function zxReadG(cv){const Z=window.ZXing;try{const r=zxRead.rd.decode(new Z.BinaryBitmap(new Z.GlobalHistogramBinarizer(new Z.HTMLCanvasElementLuminanceSource(cv))));return r&&r.getText()?r.getText().trim():null}catch(e){return null}}
 async function decodeHi(img,deg){
-  const cv=drawRot(img,Math.min(4200,Math.max(img.width,img.height)),deg);let out=[];
-  if("BarcodeDetector" in window){try{out=(await new BarcodeDetector().detect(cv)).map(x=>x.rawValue).filter(Boolean)}catch(e){}}
-  if(!out.length&&await loadZX()){const Z=window.ZXing,hints=new Map();hints.set(Z.DecodeHintType.TRY_HARDER,true);hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128,Z.BarcodeFormat.ITF,Z.BarcodeFormat.CODE_39]);const rd=new Z.MultiFormatReader();rd.setHints(hints);
-    for(const src of [cv,cropCv(cv,0,0,cv.width,cv.height*0.5)]){try{const r=rd.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.HTMLCanvasElementLuminanceSource(src))));if(r&&r.getText()){out=[r.getText()];break}}catch(e){}}}
-  return out.map(v=>v.trim()).filter(Boolean);
+  const ok=t=>t&&/^[A-Z]{2}\s?\d{8,13}$/.test(t);
+  for(const src of [img,img._raw].filter(Boolean)){
+    const cv=drawRot(src,Math.min(4200,Math.max(src.width,src.height)),deg);
+    if("BarcodeDetector" in window){try{const o=(await new BarcodeDetector().detect(cv)).map(x=>x.rawValue).filter(ok);if(o.length)return[o[0].replace(/\s/g,"")]}catch(e){}}
+    if(!(await loadZX()))return[];zxRead(document.createElement("canvas"));
+    // the barcode sits in the top part of the page: scan it strip by strip, at a few sizes
+    const bh=Math.round(cv.height*0.07),scales=cv.width<2600?[1,1.5,2]:[1,0.6];
+    for(const k of scales)for(let y=0;y<cv.height*0.5;y+=Math.round(bh/2)){const st=k===1?cropCv(cv,0,y,cv.width,bh):cropCv(cv,0,y,cv.width,bh,Math.round(cv.width*k));const t=zxRead(st)||zxReadG(st);if(ok(t))return[t.replace(/\s/g,"")]}
+  }
+  return[];
 }
 let pdfLoad=null;
 function getPDF(){if(window.pdfjsLib)return Promise.resolve(window.pdfjsLib);if(!pdfLoad)pdfLoad=loadScript("pdf.min.js").then(ok=>{if(!ok||!window.pdfjsLib){pdfLoad=null;return null}pdfjsLib.GlobalWorkerOptions.workerSrc=absU("pdf.worker.min.js");return pdfjsLib});return pdfLoad}
 const isPdf=f=>f.type==="application/pdf"||/\.pdf$/i.test(f.name||"");
 async function loadImg(f){const url=URL.createObjectURL(f);const img=new Image();try{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url});return img}catch(e){return null}finally{setTimeout(()=>URL.revokeObjectURL(url),60000)}}
+async function pdfPage(lib,doc,i){
+  const pg=await doc.getPage(i),v0=pg.getViewport({scale:1});let sc=Math.min(5,3000/Math.max(v0.width,v0.height));
+  // a scanned page is one big picture: draw it pixel for pixel
+  try{const ops=await pg.getOperatorList(),idx=[];ops.fnArray.forEach((f,k)=>{if(f===lib.OPS.paintImageXObject)idx.push(k)});
+    if(idx.length===1){const im=await new Promise(res=>{const t=setTimeout(()=>res(null),4000);try{pg.objs.get(ops.argsArray[idx[0]][0],o=>{clearTimeout(t);res(o)})}catch(e){clearTimeout(t);res(null)}});
+      if(im&&im.width>=1000&&im.width<=5000){const s=im.width/v0.width;if(Math.abs(s*v0.height-im.height)<im.height*0.03)sc=s}}}catch(e){}
+  const vp=pg.getViewport({scale:sc});const cv=document.createElement("canvas");cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);const cx=cv.getContext("2d",{willReadFrequently:true});cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);await pg.render({canvasContext:cx,viewport:vp}).promise;
+  try{pg.cleanup()}catch(e){}
+  const dd=dedither(cv,2);if(dd!==cv)dd._raw=cv;return dd;
+}
 async function scanFiles(files){
-  const msg=$("#scanMsg");
-  // expand into pages
-  const jobs=[];let pdfFail=0;
+  const msg=$("#scanMsg");const jobs=[];let pdfFail=0;
   for(const f of files){
     if(isPdf(f)){msg.textContent="⏳ Άνοιγμα PDF…";const lib=await getPDF();if(!lib){pdfFail++;continue}
-      try{const doc=await lib.getDocument({data:await f.arrayBuffer()}).promise;
-        for(let i=1;i<=doc.numPages;i++)jobs.push(async()=>{const pg=await doc.getPage(i);const v0=pg.getViewport({scale:1});const vp=pg.getViewport({scale:Math.min(4,2400/Math.max(v0.width,v0.height))});
-          const cv=document.createElement("canvas");cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);await pg.render({canvasContext:cx,viewport:vp}).promise;return cv})}catch(e){pdfFail++}}
+      try{const doc=await lib.getDocument({data:await f.arrayBuffer()}).promise;for(let i=1;i<=doc.numPages;i++)jobs.push(()=>pdfPage(lib,doc,i))}catch(e){pdfFail++}}
     else jobs.push(()=>loadImg(f));}
-  await scanJobs(jobs,pdfFail);
+  let lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request("screen")}catch(e){}
+  $("#btnSaveTags").disabled=true;
+  try{await scanJobs(jobs,pdfFail)}finally{$("#btnSaveTags").disabled=false;try{lock&&lock.release()}catch(e){}}
 }
-async function scanJobs(files,pdfFail){
-  const msg=$("#scanMsg");let ok=0,noTag=0,noInfo=0,n=0,fromTxt=0,nUns=0;
-  for(const job of files){n++;msg.textContent=`⏳ Ανάγνωση διαβατηρίου${files.length>1?` ${n}/${files.length}`:""}… (την πρώτη φορά αργεί λίγο)`;
-    let img=null;try{img=await job()}catch(e){}if(!img)continue;
-    const codes=await decodeBarcodes(img);let info=null;
-    try{info=await ocrPassport(img);if(!codes.length&&info){const hi=await decodeHi(img,lastDeg);hi.forEach(c=>codes.push(c))}
-      if(!codes.length&&info){const t=await ocrTagNo(img,lastDeg);if(t){codes.push(t.tag+(t.sure?"":"?"));fromTxt++}}
-      }catch(e){}
-    const has=info&&Object.keys(info).some(k=>k!=="_u");if(!has)noInfo++;const unsure=info&&info._u&&Object.keys(info._u).length;if(unsure)nUns++;
-    if(!codes.length&&!has)continue;
-    const tag=codes[0]||"???";if(tag.includes("?"))noTag++;else if(!unsure)ok++;
-    const ta=$("#tagInput");ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+entryLine(tag,info)+"\n"}
-  $("#tagInput").dispatchEvent(new Event("input"));
-  const bad=files.length-ok-noTag-nUns;
-  msg.innerHTML=(ok?`✓ Διαβάστηκαν <b>${ok}</b>. Έλεγξε τα στοιχεία στο πλαίσιο (ενώτιο | γέννηση | φύλο | φυλή | άφιξη) και διόρθωσε ό,τι χρειάζεται.`:"")
+async function scanJobs(jobs,pdfFail){
+  const msg=$("#scanMsg"),N=jobs.length,res=[];let n=0,fromTxt=0,bad=0;const t0=Date.now();
+  for(const job of jobs){n++;const left=n>2?Math.round((Date.now()-t0)/(n-1)*(N-n+1)/1000):0;
+    msg.textContent=`⏳ Ανάγνωση διαβατηρίου${N>1?` ${n}/${N}`:""}…`+(left>20?` απομένουν περίπου ${left>90?Math.round(left/60)+" λεπτά":left+" δευτ."}. Κράτα την οθόνη ανοιχτή.`:n===1?" (την πρώτη φορά αργεί λίγο)":"");
+    let img=null;try{img=await job()}catch(e){}if(!img){bad++;continue}
+    let codes=[],info=null,txt=null;
+    try{info=await ocrPassport(img)}catch(e){}
+    try{if(info)codes=await decodeHi(img,lastDeg);if(!codes.length)codes=await decodeBarcodes(img);
+      if(!codes.length&&info){const t=await ocrTagNo(img,lastDeg);if(t){codes.push(t.tag+(t.sure?"":"?"));fromTxt++;txt=t}}}catch(e){}
+    dbg("tagsrc",n,txt?"TEXT "+JSON.stringify(txt.cands):"barcode",codes[0]);
+    const has=info&&Object.keys(info).some(k=>k[0]!=="_"&&info[k]);
+    if(!codes.length&&!has){bad++;continue}
+    res.push({tag:codes[0]||"???",info:info||{},txt});}
+  // numbers taken from printed text must look like the barcode-read ones of the same load (same country letters, same length)
+  const pat={};res.forEach(r=>{if(!r.txt&&!r.tag.includes("?")){const k=r.tag.slice(0,2)+r.tag.length;pat[k]=(pat[k]||0)+1}});const pk=Object.entries(pat).sort((a,b)=>b[1]-a[1])[0];
+  if(pk&&pk[1]>=2)res.forEach(r=>{if(!r.txt)return;const fit=t=>t.slice(0,2)+t.length===pk[0];const c=r.txt.cands.filter(x=>fit(x[0]));
+    if(c.length&&(c.length<2||c[0][1]>c[1][1]||true)){const best=c[0],tie=c.length>1&&c[1][1]===c[0][1];r.tag=best[0]+(best[1]>=2&&!tie?"":"?")}else r.tag=r.tag.replace(/\?*$/,"?")});
+  // a breed nobody has entered before is kept only if at least two passports of the load show it
+  const bc={};res.forEach(r=>{const b=r.info.breed;if(b)bc[b]=(bc[b]||0)+1});res.forEach(r=>{const b=r.info.breed;if(b&&!isKnownBreed(b)&&bc[b]<2)delete r.info.breed});
+  const today=new Date().toISOString().slice(0,10);res.forEach(r=>{const i=r.info;if(i.birth&&(i.birth>today||i.birth<String(+today.slice(0,4)-25))){i._u=i._u||{};i._u.birth=1}});
+  // a whole load usually arrives on one day: a doubtful arrival date that agrees with the rest (or with the lot's own arrival) is accepted
+  const cnt={};res.forEach(r=>{const i=r.info;if(i.arr&&!(i._u&&i._u.arr))cnt[i.arr]=(cnt[i.arr]||0)+1;if(i._farm)cnt[i._farm]=(cnt[i._farm]||0)+1});
+  const l=lots.find(x=>x.id===cur),la=l&&calc(l).arr;if(la)cnt[la.date]=(cnt[la.date]||0)+2;
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0],D=top&&top[1]>=2?top[0]:null,Dd=D?D.slice(8,10)+D.slice(5,7)+D.slice(0,4):"";
+  res.forEach(r=>{const i=r.info,uns=i._u&&i._u.arr;if(!D||(i.arr&&!uns))return;const ad=(i._ad||"").slice(-8);
+    if(i.arr===D||(ad.length>=6&&Dd.endsWith(ad))){i.arr=D;if(i._u)delete i._u.arr}});
+  if(D&&!$("#fillArr").value)$("#fillArr").value=D;
+  let ok=0,noTag=0,nUns=0,noInfo=0;const ta=$("#tagInput");
+  res.forEach(r=>{const uns=r.info._u&&Object.keys(r.info._u).length;if(r.tag.includes("?"))noTag++;else if(uns)nUns++;else ok++;if(!Object.keys(r.info).some(k=>k[0]!=="_"&&r.info[k]))noInfo++;
+    ta.value=(ta.value&&!ta.value.endsWith("\n")?ta.value+"\n":ta.value)+entryLine(r.tag,r.info)+"\n"});
+  ta.dispatchEvent(new Event("input"));
+  const miss=f=>res.filter(r=>!r.info[f]).length,mm=[["γέννηση",miss("birth")],["φύλο",miss("sex")],["φυλή",miss("breed")],["άφιξη",miss("arr")]].filter(x=>x[1]);
+  msg.innerHTML=(res.length?`✓ Διαβάστηκαν <b>${res.length}</b>${N>1?` από ${N}`:""}. Έλεγξε τα στοιχεία στο πλαίσιο (ενώτιο | γέννηση | φύλο | φυλή | άφιξη) και διόρθωσε ό,τι χρειάζεται.`:"")
+    +(mm.length&&res.length?` Λείπουν: ${mm.map(x=>`${x[0]} σε ${x[1]}`).join(", ")}.`:"")
     +(fromTxt?` ℹ️ Σε ${fromTxt} το barcode δεν διαβάστηκε και ο αριθμός πάρθηκε από το τυπωμένο κείμενο: έλεγξέ τον προσεκτικά.`:"")
     +(nUns?` ⚠ Σε ${nUns} μια ημερομηνία δεν διαβάστηκε με σιγουριά και έχει «?»: σύγκρινέ τη με το διαβατήριο, διόρθωσέ τη και σβήσε το «?».`:"")
     +(noTag?` ⚠ Σε ${noTag} ο αριθμός ενωτίου έχει «?»: διόρθωσέ τον και σβήσε το «?» για να αποθηκευτεί.`:"")
-    +(bad>0?` ⚠ ${bad} ${files.length>1?"σελίδες/φωτογραφίες":""} δεν διαβάστηκαν καθόλου.`:"")+(pdfFail?` ⚠ ${pdfFail} PDF δεν άνοιξαν.`:"")
-    +(ok&&noInfo&&!bad?` Τα υπόλοιπα στοιχεία δεν διαβάστηκαν σε ${noInfo}· συμπλήρωσέ τα με το χέρι αν θέλεις.`:"");
+    +(bad>0?` ⚠ ${bad} ${N>1?"σελίδες/φωτογραφίες":""} δεν διαβάστηκαν καθόλου.`:"")+(pdfFail?` ⚠ ${pdfFail} PDF δεν άνοιξαν.`:"");
 }
+$("#btnFill").onclick=()=>{const arr=$("#fillArr").value,sex=$("#fillSex").value,breed=$("#fillBreed").value.trim().toUpperCase();if(!arr&&!sex&&!breed){toast("Διάλεξε τι θα συμπληρωθεί");return}
+  let n=0;const ta=$("#tagInput");ta.value=ta.value.split(/\n/).map(line=>{if(!line.trim()||line.includes("?"))return line;const es=parseEntries(line);if(es.length!==1)return line;const e=es[0],i=e.info,b=JSON.stringify(i);
+    if(arr&&!i.arr)i.arr=arr;if(sex&&!i.sex)i.sex=sex;if(breed&&!i.breed)i.breed=breed;if(JSON.stringify(i)!==b)n++;return entryLine(e.tag,i)}).join("\n");
+  ta.dispatchEvent(new Event("input"));toast(n?`Συμπληρώθηκαν ${n} γραμμές`:"Δεν υπήρχαν κενά να συμπληρωθούν")};
 $("#btnScanCam").onclick=()=>$("#scanCam").click();$("#btnScanGal").onclick=()=>$("#scanGal").click();
 ["#scanCam","#scanGal"].forEach(id=>$(id).addEventListener("change",e=>{const fs=[...e.target.files];e.target.value="";if(fs.length)scanFiles(fs)}));
 
