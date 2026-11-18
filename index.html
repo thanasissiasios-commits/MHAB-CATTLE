@@ -164,6 +164,13 @@ svg text{fill:var(--mute);font-size:11px}
       <div id="tagList"></div>
     </div>
     <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <h4 class="sp" style="margin:0">📄 TRACES – Πιστοποιητικά INTRA <span class="meta" id="intraCount" style="font-weight:400"></span></h4>
+        <button class="pri sm" id="btnAddIntra">+ Προσθήκη</button>
+      </div>
+      <div id="intraList"></div>
+    </div>
+    <div class="card">
       <h4>Καμπύλη βάρους</h4>
       <div id="chart"></div>
     </div>
@@ -273,6 +280,27 @@ svg text{fill:var(--mute);font-size:11px}
   </div>
   <p class="note" id="tagPrev"></p>
   <div class="row"><span class="sp"></span><button type="button" data-close>Άκυρο</button><button class="pri" id="btnSaveTags">Προσθήκη</button></div>
+</div></div>
+
+<div class="modal hide" id="mIntra"><div class="box">
+  <h2 id="mIntraTitle" style="margin-bottom:12px">Πιστοποιητικό INTRA (TRACES)</h2>
+  <form id="fIntra">
+    <div class="grid">
+      <div style="grid-column:1/-1"><label>Αριθμός αναφοράς INTRA *</label><input name="no" required placeholder="π.χ. INTRA.FR.2026.0012345" autocapitalize="characters" style="font-family:ui-monospace,monospace"></div>
+      <div><label>Ημερομηνία έκδοσης</label><input name="date" type="date"></div>
+      <div><label>Αριθμός ζώων</label><input name="heads" type="number" min="1" inputmode="numeric"></div>
+      <div style="grid-column:1/-1"><label>Τόπος / εκμετάλλευση προέλευσης</label><input name="origin" placeholder="π.χ. κέντρο συγκέντρωσης, περιοχή"></div>
+      <div><label>Μεταφορέας</label><input name="carrier"></div>
+      <div><label>Πινακίδα οχήματος</label><input name="plate" autocapitalize="characters"></div>
+      <div style="grid-column:1/-1"><label>Σημειώσεις</label><textarea name="note" rows="2"></textarea></div>
+    </div>
+    <div class="row" style="margin-top:14px">
+      <button type="button" class="danger hide" id="btnDelIntra">Διαγραφή</button>
+      <span class="sp"></span>
+      <button type="button" data-close>Άκυρο</button>
+      <button class="pri" type="submit">Αποθήκευση</button>
+    </div>
+  </form>
 </div></div>
 
 <div class="modal hide" id="mInfo"><div class="box">
@@ -392,6 +420,7 @@ function renderList(){
       ${c.fcrCum!=null?`<div class="meta">FCR: <b>${nf(c.fcrCum,2)}</b> kg ζωοτρ./kg αύξησης</div>`:""}
       ${c.last?`<div class="meta">Τελ. βάρος: <b>${nf(c.last.weight)} kg</b> (${fd(c.last.date)})</div>`:""}
       ${(l.tags||[]).length?`<div class="meta">🏷️ ${l.tags.length} ενώτια</div>`:""}
+      ${(l.intra||[]).length?`<div class="meta">📄 ${l.intra.map(x=>esc(x.no)).join(", ")}</div>`:""}
       ${hits.length?`<div class="chips" style="margin-top:6px">${hits.slice(0,6).map(t=>`<span class="chip hit">${esc(fmtTag(t))}</span>`).join("")}</div>`:""}
     </div>`;
   }).join("");
@@ -416,6 +445,7 @@ function renderLot(){
   ].join("");
   renderRange(l,c);
   renderTags(l);
+  renderIntra(l);
   const t=$("#tbl");
   if(!c.rows.length){t.innerHTML='<tr><td class="empty" colspan="11">Πρόσθεσε πρώτα τη ζύγιση φόρτωσης στη Γαλλία.</td></tr>';}
   else{
@@ -550,6 +580,33 @@ $("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag
 $("#btnCopyTags").onclick=async()=>{const l=lots.find(x=>x.id===cur);const txt=(l.tags||[]).map(fmtTag).join("\n");if(!txt){toast("Δεν υπάρχουν ενώτια");return}
   try{await navigator.clipboard.writeText(txt);toast(`Αντιγράφηκαν ${l.tags.length} ενώτια`)}catch(e){$("#csvTxt").value=txt;open("#mCsv")}};
 $("#tagSearch").addEventListener("input",()=>renderList());
+
+/* TRACES INTRA certificates */
+const normIntra=s=>String(s).toUpperCase().replace(/\s+/g,"");
+function renderIntra(l){
+  const a=l.intra||[],tot=a.reduce((n,x)=>n+(x.heads||0),0);
+  $("#intraCount").textContent=a.length?`· ${a.length}`+(tot?` · ${tot} ζώα`+(l.heads&&tot!==l.heads?` ⚠ (παρτίδα: ${l.heads})`:""):""):"";
+  $("#intraList").innerHTML=!a.length?'<p class="note">Δεν έχει καταχωρηθεί πιστοποιητικό INTRA για την παρτίδα.</p>':
+    a.map(x=>{const o=lots.find(y=>y.id!==l.id&&(y.intra||[]).some(z=>normIntra(z.no)===normIntra(x.no)));
+      return`<div class="wc"><div class="top"><b style="font-family:ui-monospace,monospace">${esc(x.no)}</b><span class="sp"></span><button class="sm" data-cpintra="${esc(x.id)}">Αντιγραφή</button><button class="sm" data-edintra="${esc(x.id)}">✎</button></div>
+      <div class="meta">${[x.date?"Έκδοση "+fd(x.date):"",x.heads?x.heads+" ζώα":"",x.origin,x.carrier,x.plate].filter(Boolean).map(esc).join(" · ")}</div>${x.note?`<div class="meta">${esc(x.note)}</div>`:""}${o?`<div class="meta" style="color:var(--warn)">⚠ Το ίδιο INTRA υπάρχει και στην παρτίδα «${esc(o.name)}»</div>`:""}</div>`}).join("");
+}
+let editingIntra=null;
+function openIntra(x){editingIntra=x||null;const f=$("#fIntra");f.reset();const l=lots.find(y=>y.id===cur);
+  if(x){["no","date","heads","origin","carrier","plate","note"].forEach(k=>f[k].value=x[k]??"");$("#btnDelIntra").classList.remove("hide");$("#mIntraTitle").textContent="Επεξεργασία INTRA"}
+  else{const c=calc(l);if(c.load)f.date.value=c.load.date;if(!(l.intra||[]).length&&l.heads)f.heads.value=l.heads;$("#btnDelIntra").classList.add("hide");$("#mIntraTitle").textContent="Πιστοποιητικό INTRA (TRACES)"}
+  open("#mIntra")}
+$("#btnAddIntra").onclick=()=>openIntra(null);
+$("#intraList").addEventListener("click",async e=>{const l=lots.find(y=>y.id===cur);const b=e.target.closest("[data-edintra]");if(b){openIntra((l.intra||[]).find(x=>x.id===b.dataset.edintra));return}
+  const c=e.target.closest("[data-cpintra]");if(c){const x=(l.intra||[]).find(y=>y.id===c.dataset.cpintra);try{await navigator.clipboard.writeText(x.no);toast("Αντιγράφηκε: "+x.no)}catch(err){toast(x.no)}}});
+$("#fIntra").onsubmit=e=>{e.preventDefault();const f=e.target,l=lots.find(y=>y.id===cur);
+  const d={no:f.no.value.trim().toUpperCase(),date:f.date.value||null,heads:f.heads.value?+f.heads.value:null,origin:f.origin.value.trim(),carrier:f.carrier.value.trim(),plate:f.plate.value.trim().toUpperCase(),note:f.note.value.trim()};
+  if(!d.no)return;l.intra=l.intra||[];
+  if(l.intra.some(x=>x!==editingIntra&&normIntra(x.no)===normIntra(d.no))){toast("Αυτό το INTRA υπάρχει ήδη στην παρτίδα");return}
+  if(editingIntra)Object.assign(editingIntra,d);else l.intra.push(Object.assign({id:uid()},d));
+  persist(l);close(f);renderIntra(l);
+  const o=lots.find(y=>y.id!==l.id&&(y.intra||[]).some(z=>normIntra(z.no)===normIntra(d.no)));if(o)infoBox(`<h2 style="margin-bottom:8px">⚠ Διπλοεγγραφή INTRA</h2><p>Το <b>${esc(d.no)}</b> είναι καταχωρημένο και στην παρτίδα «${esc(o.name)}».</p>`)};
+$("#btnDelIntra").onclick=()=>{$("#mIntra").classList.add("hide");confirmBox(`Διαγραφή του ${editingIntra.no};`,()=>{const l=lots.find(y=>y.id===cur);l.intra=(l.intra||[]).filter(x=>x!==editingIntra);persist(l);renderIntra(l)})};
 
 /* barcode from photo */
 let zxLoad=null;
@@ -979,7 +1036,9 @@ function xlsxBytes(){
     let n=0;c.rows.forEach(r=>{const w=r.w;
       det.rows.push([l.name,w.date,w.type==="w"?`${++n}η ζύγιση`:TYPES[w.type],w.heads,w.gross,w.tare,w.net,w.weight,r.days,r1(r.gain),gr(r.adg),gr(r.adgArr),gr(r.adgLoad),r2(r.intake),r2(r.fcr),w.note]);});
   });
-  return XL.build([sum,det,tg]);
+  const tr={name:"TRACES INTRA",cols:[{h:"Παρτίδα",w:22},{h:"Αριθμός INTRA",w:28},{h:"Ημ. έκδοσης",w:13,f:"d"},{h:"Ζώα",w:7,f:"n0"},{h:"Προέλευση",w:26},{h:"Μεταφορέας",w:20},{h:"Πινακίδα",w:12},{h:"Σημειώσεις",w:28}],rows:[]};
+  ls.forEach(l=>(l.intra||[]).forEach(x=>tr.rows.push([l.name,x.no,x.date,x.heads,x.origin,x.carrier,x.plate,x.note])));
+  return XL.build([sum,det,tg,tr]);
 }
 const xlsxName=()=>"MHAB_vooeidon_"+new Date().toISOString().slice(0,10)+".xlsx";
 $("#btnXlsx").onclick=()=>{if(!lots.length){toast("Δεν υπάρχουν δεδομένα");return}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([xlsxBytes()],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=xlsxName();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις")};
