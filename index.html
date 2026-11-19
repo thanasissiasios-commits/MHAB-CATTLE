@@ -110,6 +110,7 @@ svg text{fill:var(--mute);font-size:11px}
       <button class="sm" id="btnRestore">Εισαγωγή αντιγράφου</button>
       <input type="file" id="fileRestore" accept=".json,application/json" class="hide">
     </div>
+    <div class="kpis" id="barn" style="margin-top:8px"></div>
     <input id="tagSearch" placeholder="🔍 Αναζήτηση ενωτίου σε όλες τις παρτίδες…" style="margin:8px 0">
     <div id="lots" class="lots"></div>
   </section>
@@ -171,6 +172,13 @@ svg text{fill:var(--mute);font-size:11px}
       <div id="intraList"></div>
     </div>
     <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <h4 class="sp" style="margin:0">✝ Απώλειες &amp; 🔪 σφαγές <span class="meta" id="exitCount" style="font-weight:400"></span></h4>
+        <button class="pri sm" id="btnAddExit">+ Προσθήκη</button>
+      </div>
+      <div id="exitList"></div>
+    </div>
+    <div class="card">
       <h4>Καμπύλη βάρους</h4>
       <div id="chart"></div>
     </div>
@@ -186,6 +194,7 @@ svg text{fill:var(--mute);font-size:11px}
       <div><label>Φύλο</label><select name="sex"><option value="">—</option><option>Αρσενικά</option><option>Θηλυκά</option><option>Μικτά</option></select></div>
       <div><label>Αριθμός ζώων</label><input name="heads" type="number" min="1" inputmode="numeric"></div>
       <div><label>Προμηθευτής / έμπορος</label><input name="supplier"></div>
+      <div><label>Κατάσταση</label><select name="closed"><option value="">Στον στάβλο</option><option value="1">Έφυγε (πουλήθηκε / σφάχτηκε)</option></select></div>
       <div><label>Βάση ζωοτροφής</label><select name="feedBasis"><option value="Νωπή">Νωπή (όπως χορηγείται)</option><option value="ΞΟ">Ξηρή ουσία (ΞΟ)</option></select></div>
       <div style="grid-column:1/-1"><label>Σημειώσεις</label><textarea name="notes" rows="2"></textarea></div>
     </div>
@@ -303,6 +312,39 @@ svg text{fill:var(--mute);font-size:11px}
   </form>
 </div></div>
 
+<div class="modal hide" id="mAnimal"><div class="box">
+  <h2 id="anTitle" style="margin-bottom:4px;font-family:ui-monospace,monospace"></h2>
+  <p class="meta" id="anInfo" style="margin-top:0"></p>
+  <div style="display:grid;gap:8px">
+    <button class="danger" id="anDead" style="padding:12px">✝ Ψόφησε</button>
+    <button id="anSl" style="padding:12px;border-color:var(--blue);color:var(--blue)">🔪 Πήγε στο σφαγείο</button>
+    <button id="anExitEd" style="padding:12px">✎ Αλλαγή ημερομηνίας / στοιχείων εξόδου</button>
+    <button id="anBack" style="padding:12px">↩ Επαναφορά στον στάβλο</button>
+    <button id="anEdit" style="padding:12px">✎ Επεξεργασία στοιχείων ζώου</button>
+    <button data-close style="padding:12px">Κλείσιμο</button>
+  </div>
+</div></div>
+
+<div class="modal hide" id="mExit"><div class="box">
+  <h2 id="mExitTitle" style="margin-bottom:12px">Έξοδος ζώου</h2>
+  <form id="fExit">
+    <div class="grid">
+      <div><label>Τι έγινε *</label><select name="type" required><option value="dead">✝ Ψόφησε</option><option value="slaughter">🔪 Πήγε στο σφαγείο</option></select></div>
+      <div><label>Ημερομηνία *</label><input name="date" type="date" required></div>
+      <div style="grid-column:1/-1"><label>Ενώτιο</label><input name="tag" list="exitTags" placeholder="γράψε τα τελευταία ψηφία ή άφησέ το κενό" autocapitalize="characters" autocomplete="off" style="font-family:ui-monospace,monospace"><datalist id="exitTags"></datalist></div>
+      <div><label id="exWLbl">Βάρος (kg)</label><input name="weight" type="number" step="0.1" min="0" inputmode="decimal"></div>
+      <div><label id="exNLbl">Αιτία / σημείωση</label><input name="note"></div>
+    </div>
+    <p class="note" id="exitHint"></p>
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="danger hide" id="btnDelExit">Διαγραφή</button>
+      <span class="sp"></span>
+      <button type="button" data-close>Άκυρο</button>
+      <button class="pri" type="submit">Αποθήκευση</button>
+    </div>
+  </form>
+</div></div>
+
 <div class="modal hide" id="mInfo"><div class="box">
   <div id="infoMsg" style="margin-bottom:12px"></div>
   <div class="row"><span class="sp"></span><button class="pri" data-close>Εντάξει</button></div>
@@ -402,7 +444,22 @@ function render(){
   if(cur&&lots.find(l=>l.id===cur)){renderLot();show("lot");}
   else{cur=null;renderList();show("list");}
 }
+const EXT={dead:"Ψόφησε",slaughter:"Σφαγείο"},EXI={dead:"✝",slaughter:"🔪"};
+function headsStart(l){const ws=sorted(l);const a=ws.find(x=>x.type==="arr"&&x.heads)||ws.find(x=>x.type==="load"&&x.heads);return (a&&a.heads)||l.heads||(l.tags||[]).length||0}
+function headsNow(l){const w=sorted(l).filter(x=>x.heads).pop(),ex=l.exits||[];
+  // a weighing already counts only the animals that were there that day: take off the ones that left after it
+  if(w)return Math.max(0,w.heads-ex.filter(e=>e.date>w.date).length);
+  return Math.max(0,(l.heads||(l.tags||[]).length||0)-ex.length)}
+function exitOf(l,t){return (l.exits||[]).find(e=>e.tag===t)||null}
+function renderBarn(){
+  const act=lots.filter(l=>!l.closed),tot=act.reduce((n,l)=>n+headsNow(l),0),no=act.filter(l=>!headsNow(l)&&!(l.exits||[]).length).length,cl=lots.length-act.length;
+  const nd=lots.reduce((n,l)=>n+(l.exits||[]).filter(e=>e.type==="dead").length,0),ns=lots.reduce((n,l)=>n+(l.exits||[]).filter(e=>e.type==="slaughter").length,0);
+  $("#barn").innerHTML=!lots.length?"":kpi("🐂 Ζώα στον στάβλο",tot.toLocaleString("el-GR"),`σε ${act.length} ${act.length===1?"παρτίδα":"παρτίδες"}`+(no?` · ${no} χωρίς αριθμό ζώων`:"")+(cl?` · ${cl} έφυγ${cl===1?"ε":"αν"}`:""))
+    +(nd||ns?kpi("✝ Απώλειες · 🔪 Σφαγές",`${nd} · ${ns}`,"σε όλες τις παρτίδες"):"")
+    +(act.length>1?`<div class="kpi" style="grid-column:span 2"><div class="l">Ανά παρτίδα</div><div class="s" style="font-size:13px;line-height:1.6">${act.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).map(l=>`${esc(l.name)}: <b>${headsNow(l)}</b>`).join(" · ")}</div></div>`:"");
+}
 function renderList(){
+  renderBarn();
   const el=$("#lots");
   if(!lots.length){el.innerHTML='<div class="card empty" style="grid-column:1/-1">Δεν υπάρχουν παρτίδες ακόμα.<br>Πάτα «+ Νέα παρτίδα» για να ξεκινήσεις.</div>';return;}
   const tq=normTag($("#tagSearch").value||"");
@@ -413,8 +470,8 @@ function renderList(){
     const c=calc(l);
     const main=c.adgFarm!=null?`<div class="big ${cls(c.adgFarm)}">${g(c.adgFarm)}<span class="meta" style="font-weight:400"> /ημέρα</span></div><div class="meta">ΜΗΑΒ από άφιξη · ${c.dFarm} ημ.</div>`
       :`<div class="meta">${c.ws.length?c.ws.length+" καταχωρήσεις":"Χωρίς ζυγίσεις"}</div>`;
-    return `<div class="card lot" data-id="${esc(l.id)}">
-      <h3>${esc(l.name)}</h3>
+    return `<div class="card lot" data-id="${esc(l.id)}"${l.closed?' style="opacity:.6"':""}>
+      <h3>${esc(l.name)}${l.closed?' <span class="tag arr">Έφυγε</span>':""}</h3>
       <div class="meta">${[l.breed,l.sex,l.heads?l.heads+" ζώα":""].filter(Boolean).map(esc).join(" · ")||"&nbsp;"}</div>
       <div style="margin-top:8px">${main}</div>
       ${c.fcrCum!=null?`<div class="meta">FCR: <b>${nf(c.fcrCum,2)}</b> kg ζωοτρ./kg αύξησης</div>`:""}
@@ -442,10 +499,13 @@ function renderLot(){
     kpi("Αποδοτικότητα ζωοτροφής",c.effCum!=null?Math.round(c.effCum*1000)+" g":"—",c.effCum!=null?"αύξηση ανά kg ζωοτροφής":""),
     kpi("FCR τελ. διαστήματος",c.fcrLast!=null?nf(c.fcrLast,2):"—",c.intakeLast!=null?`${nf(c.intakeLast,2)} kg/ζώο/ημ.`:""),
     kpi("Μέση κατανάλωση",c.intakeAvg!=null?nf(c.intakeAvg,2)+" kg":"—",c.intakeAvg!=null?`ανά ζώο/ημέρα · σύνολο ${nf(c.feedHead,0)} kg/ζώο`:""),
+    (()=>{const ex=l.exits||[],d=ex.filter(e=>e.type==="dead").length,sl=ex.filter(e=>e.type==="slaughter").length,st=headsStart(l);
+      return kpi("🐂 Ζώα τώρα",headsNow(l)||"—",`αρχικά ${st||"—"}`+(d?` · ✝ ${d}`+(st?` (${nf(d/st*100,1)}%)`:""):"")+(sl?` · 🔪 ${sl}`:""))})(),
   ].join("");
   renderRange(l,c);
   renderTags(l);
   renderIntra(l);
+  renderExits(l);
   const t=$("#tbl");
   if(!c.rows.length){t.innerHTML='<tr><td class="empty" colspan="11">Πρόσθεσε πρώτα τη ζύγιση φόρτωσης στη Γαλλία.</td></tr>';}
   else{
@@ -542,13 +602,14 @@ function sortedTags(l){
 }
 function renderTags(l){
   const tags=sortedTags(l),q=normTag($("#tagFilter").value||"");
-  $("#tagCount").textContent=`· ${tags.length}`+(l.heads?` / ${l.heads} ζώα`:"")+(l.heads&&tags.length&&tags.length!==l.heads?" ⚠":"");
+  const nex=tags.filter(t=>exitOf(l,t)).length;
+  $("#tagCount").textContent=`· ${tags.length}`+(nex?` (${tags.length-nex} στον στάβλο)`:"")+(l.heads?` / ${l.heads} ζώα`:"")+(l.heads&&tags.length&&tags.length!==l.heads?" ⚠":"");
   const dups=tags.map(t=>[t,otherLotOf(l,t)]).filter(x=>x[1]);const dset=new Set(dups.map(x=>x[0]));
   $("#tagWarn").innerHTML=dups.length?`<div style="background:var(--warn2);color:var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px">⚠ <b>${dups.length} διπλοεγγραφ${dups.length>1?"ές":"ή"}</b>: ${dups.length>1?"τα ενώτια υπάρχουν":"το ενώτιο υπάρχει"} και σε άλλη παρτίδα — ${dups.slice(0,8).map(x=>`${esc(fmtTag(x[0]))} (${esc(x[1])})`).join(", ")}${dups.length>8?` και ${dups.length-8} ακόμη`:""}</div>`:"";
   const shown=q?tags.filter(t=>t.includes(q)):tags;
   $("#tagList").innerHTML=!tags.length?'<p class="note">Δεν έχουν καταχωρηθεί ενώτια. Πάτα «+ Προσθήκη».</p>':
     !shown.length?'<p class="note">Δεν βρέθηκε.</p>':
-    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}" data-edtag="${esc(t)}" style="cursor:pointer${dset.has(t)?";border-color:var(--warn)":""}">${dset.has(t)?"⚠ ":""}${esc(fmtTag(t))}${infoTxt((l.tagInfo||{})[t])?` <span class="meta" style="font-family:system-ui,sans-serif">${infoTxt(l.tagInfo[t])}</span>`:""}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
+    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}" data-edtag="${esc(t)}" style="cursor:pointer${dset.has(t)?";border-color:var(--warn)":""}">${dset.has(t)?"⚠ ":""}${exitOf(l,t)?`${EXI[exitOf(l,t).type]} <s>${esc(fmtTag(t))}</s> <span class="meta" style="font-family:system-ui,sans-serif">${EXT[exitOf(l,t).type]} ${fd(exitOf(l,t).date)}</span>`:esc(fmtTag(t))}${infoTxt((l.tagInfo||{})[t])?` <span class="meta" style="font-family:system-ui,sans-serif">${infoTxt(l.tagInfo[t])}</span>`:""}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
 }
 try{$("#tagSort").value=localStorage.getItem("adg_tagsort")||"entry"}catch(e){}
 $("#tagSort").addEventListener("change",()=>{try{localStorage.setItem("adg_tagsort",$("#tagSort").value)}catch(e){}const l=lots.find(x=>x.id===cur);if(l)renderTags(l)});
@@ -557,10 +618,22 @@ async function saveX(name,bytes){
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις");
 }
 $("#btnTagsXlsx").onclick=()=>{const l=lots.find(x=>x.id===cur);if(!l||!(l.tags||[]).length){toast("Δεν υπάρχουν ενώτια");return}
-  const sh={name:"Ενώτια",cols:[{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22}],rows:[]};
-  sortedTags(l).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};sh.rows.push([i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t)])});
+  const sh={name:"Ενώτια",cols:[{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"}],rows:[]};
+  sortedTags(l).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);sh.rows.push([i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null])});
   saveX("Enotia_"+(stripAcc(l.name).replace(/[Α-Ω]/g,c=>({"Α":"A","Β":"V","Γ":"G","Δ":"D","Ε":"E","Ζ":"Z","Η":"I","Θ":"TH","Ι":"I","Κ":"K","Λ":"L","Μ":"M","Ν":"N","Ξ":"X","Ο":"O","Π":"P","Ρ":"R","Σ":"S","Τ":"T","Υ":"Y","Φ":"F","Χ":"CH","Ψ":"PS","Ω":"O"}[c]||"")).replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,40)||"partida")+"_"+new Date().toISOString().slice(0,10)+".xlsx",XL.build([sh]))};
 function infoBox(html){$("#infoMsg").innerHTML=html;open("#mInfo")}
+function editTagInfo(t){const l=lots.find(x=>x.id===cur),i=(l.tagInfo||{})[t]||{};window._edTag=t;
+  $("#tagInput").value=[t,i.birth?fd(i.birth):"-",i.sex||"",i.breed||"",i.arr?fd(i.arr):""].join(" | ");$("#tagPrev").textContent="";open("#mTags")}
+let animalTag=null;
+function openAnimal(t){animalTag=t;const l=lots.find(x=>x.id===cur),i=(l.tagInfo||{})[t],e=exitOf(l,t);
+  $("#anTitle").textContent=fmtTag(t);$("#anInfo").innerHTML=(infoTxt(i)||"Χωρίς άλλα στοιχεία")+(e?`<br><b>${EXI[e.type]} ${EXT[e.type]} στις ${fd(e.date)}</b>${e.note?" · "+esc(e.note):""}`:"<br>Στον στάβλο");
+  $("#anDead").classList.toggle("hide",!!e);$("#anSl").classList.toggle("hide",!!e);$("#anExitEd").classList.toggle("hide",!e);$("#anBack").classList.toggle("hide",!e);open("#mAnimal")}
+const anClose=()=>$("#mAnimal").classList.add("hide");
+$("#anDead").onclick=()=>{anClose();openExit(null,animalTag,"dead")};
+$("#anSl").onclick=()=>{anClose();openExit(null,animalTag,"slaughter")};
+$("#anExitEd").onclick=()=>{anClose();const l=lots.find(x=>x.id===cur);openExit(exitOf(l,animalTag))};
+$("#anBack").onclick=()=>{anClose();const l=lots.find(x=>x.id===cur);l.exits=(l.exits||[]).filter(x=>x.tag!==animalTag);persist(l);render();toast("Το ζώο μετράει ξανά στον στάβλο")};
+$("#anEdit").onclick=()=>{anClose();editTagInfo(animalTag)};
 $("#tagFilter").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);if(l)renderTags(l)});
 $("#btnAddTags").onclick=()=>{window._edTag=null;$("#tagInput").value="";$("#tagPrev").textContent="";open("#mTags");setTimeout(()=>$("#tagInput").focus(),50)};
 $("#tagInput").addEventListener("input",()=>{const l=lots.find(x=>x.id===cur);const ents=parseEntries($("#tagInput").value);const n=ents.map(e=>e.tag);const ex=new Set(l.tags||[]);const nw=[...new Set(n)].filter(t=>!ex.has(t)&&!t.includes("?"));const upd=ents.filter(e=>ex.has(e.tag)&&Object.keys(e.info).length).length;const qm=n.filter(t=>t.includes("?")).length;
@@ -574,12 +647,44 @@ $("#btnSaveTags").onclick=()=>{const l=lots.find(x=>x.id===cur);const ex=l.tags|
   window._edTag=null;l.tags=ex;l.tagInfo=ti;$("#mTags").classList.add("hide");if(add||upd){persist(l);toast((add?`Προστέθηκαν ${add} ενώτια`:"")+(add&&upd?" · ":"")+(upd?`Ενημερώθηκαν ${upd}`:""))}else if(!dupIn.length)toast("Δεν προστέθηκε κάτι νέο");renderTags(l);
   if(dupIn.length||dupOther.length)infoBox(`<h2 style="margin-bottom:8px">⚠ Διπλοεγγραφές</h2>`+(dupIn.length?`<p><b>${dupIn.length}</b> ${dupIn.length>1?"ενώτια υπήρχαν":"ενώτιο υπήρχε"} ήδη σε αυτή την παρτίδα και <b>δεν προστέθηκ${dupIn.length>1?"αν":"ε"} ξανά</b>:<br><span style="font-family:ui-monospace,monospace;font-size:13px">${dupIn.map(esc).join("<br>")}</span></p>`:"")+(dupOther.length?`<p><b>${dupOther.length}</b> ${dupOther.length>1?"ενώτια προστέθηκαν, αλλά υπάρχουν":"ενώτιο προστέθηκε, αλλά υπάρχει"} και σε άλλη παρτίδα. Έλεγξε σε ποια ανήκ${dupOther.length>1?"ουν":"ει"}:<br><span style="font-family:ui-monospace,monospace;font-size:13px">${dupOther.map(esc).join("<br>")}</span></p>`:""))};
 $("#tagList").addEventListener("click",e=>{const b=e.target.closest("[data-rmtag]");
-  if(!b){const c=e.target.closest("[data-edtag]");if(c){const l=lots.find(x=>x.id===cur),t=c.dataset.edtag,i=(l.tagInfo||{})[t]||{};window._edTag=t;
-    $("#tagInput").value=[t,i.birth?fd(i.birth):"-",i.sex||"",i.breed||"",i.arr?fd(i.arr):""].join(" | ");$("#tagPrev").textContent="";open("#mTags")}return}const t=b.dataset.rmtag;
+  if(!b){const c=e.target.closest("[data-edtag]");if(c)openAnimal(c.dataset.edtag);return}const t=b.dataset.rmtag;
   confirmBox(`Διαγραφή του ενωτίου ${fmtTag(t)};`,()=>{const l=lots.find(x=>x.id===cur);l.tags=(l.tags||[]).filter(x=>x!==t);if(l.tagInfo)delete l.tagInfo[t];persist(l);renderTags(l)})});
 $("#btnCopyTags").onclick=async()=>{const l=lots.find(x=>x.id===cur);const txt=(l.tags||[]).map(fmtTag).join("\n");if(!txt){toast("Δεν υπάρχουν ενώτια");return}
   try{await navigator.clipboard.writeText(txt);toast(`Αντιγράφηκαν ${l.tags.length} ενώτια`)}catch(e){$("#csvTxt").value=txt;open("#mCsv")}};
 $("#tagSearch").addEventListener("input",()=>renderList());
+
+/* animals that died or went to slaughter */
+function renderExits(l){
+  const a=(l.exits||[]).slice().sort((x,y)=>x.date<y.date?1:-1),d=a.filter(e=>e.type==="dead").length,sl=a.length-d;
+  $("#exitCount").textContent=a.length?`· ✝ ${d} · 🔪 ${sl}`:"";
+  $("#exitList").innerHTML=!a.length?'<p class="note">Καμία απώλεια ή σφαγή. Πάτα «+ Προσθήκη» όταν ένα ζώο ψοφήσει ή πάει στο σφαγείο.</p>':
+    a.map(e=>{const i=e.tag?(l.tagInfo||{})[e.tag]:null;return`<div class="wc"><div class="top"><span class="tag ${e.type==="dead"?"arr":"load"}">${EXI[e.type]} ${EXT[e.type]}</span><span class="meta">${fd(e.date)}</span><b style="font-family:ui-monospace,monospace">${e.tag?esc(fmtTag(e.tag)):"χωρίς ενώτιο"}</b><span class="sp"></span><button class="sm" data-edexit="${esc(e.id)}">✎</button></div>
+      <div class="meta">${[i&&i.birth?`ηλικία ${ageAt(i.birth,e.date)}`:"",e.weight?`${nf(e.weight)} kg`:"",e.note].filter(Boolean).map(esc).join(" · ")}</div></div>`}).join("");
+}
+function ageAt(b,d){const x=new Date(b),y=new Date(d);const m=(y.getFullYear()-x.getFullYear())*12+y.getMonth()-x.getMonth()-(y.getDate()<x.getDate()?1:0);return m>=0?`${m} μην.`:""}
+let editingExit=null;
+function exitUi(){const f=$("#fExit"),sl=f.type.value==="slaughter";$("#exWLbl").textContent=sl?"Βάρος σφάγιου ή ζωντανό (kg)":"Βάρος (kg)";$("#exNLbl").textContent=sl?"Σφαγείο / σημείωση":"Αιτία / σημείωση";
+  const l=lots.find(y=>y.id===cur),t=normTag(f.tag.value);let h="";
+  if(t&&l){const tags=l.tags||[];let m=tags.filter(x=>x===t);if(!m.length)m=tags.filter(x=>x.endsWith(t));if(!m.length)m=tags.filter(x=>x.includes(t));
+    if(m.length===1){const i=(l.tagInfo||{})[m[0]];h=`✓ ${fmtTag(m[0])}`+(i&&infoTxt(i)?` · ${infoTxt(i).replace(/<[^>]+>/g,"")}`:"")}
+    else if(m.length>1)h=`Ταιριάζουν ${m.length} ενώτια: γράψε περισσότερα ψηφία.`;else h="⚠ Δεν υπάρχει στα ενώτια της παρτίδας. Θα αποθηκευτεί όπως το έγραψες."}
+  $("#exitHint").textContent=h}
+["input","change"].forEach(ev=>$("#fExit").addEventListener(ev,exitUi));
+function openExit(e,preTag,preType){editingExit=e||null;const f=$("#fExit");f.reset();const l=lots.find(y=>y.id===cur);
+  $("#exitTags").innerHTML=(l.tags||[]).filter(t=>!exitOf(l,t)||(e&&e.tag===t)).map(t=>`<option value="${esc(t)}">`).join("");
+  if(e){f.type.value=e.type;f.date.value=e.date;f.tag.value=e.tag||"";f.weight.value=e.weight??"";f.note.value=e.note||"";$("#btnDelExit").classList.remove("hide");$("#mExitTitle").textContent="Επεξεργασία εξόδου ζώου"}
+  else{f.date.value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);if(preTag)f.tag.value=preTag;if(preType)f.type.value=preType;$("#btnDelExit").classList.add("hide");$("#mExitTitle").textContent="Έξοδος ζώου"}
+  exitUi();open("#mExit")}
+$("#btnAddExit").onclick=()=>openExit(null);
+$("#exitList").addEventListener("click",e=>{const b=e.target.closest("[data-edexit]");if(!b)return;const l=lots.find(y=>y.id===cur);openExit((l.exits||[]).find(x=>x.id===b.dataset.edexit))});
+$("#fExit").onsubmit=ev=>{ev.preventDefault();const f=ev.target,l=lots.find(y=>y.id===cur);let t=normTag(f.tag.value);
+  if(t){const tags=l.tags||[];let m=tags.filter(x=>x===t);if(!m.length)m=tags.filter(x=>x.endsWith(t));if(!m.length)m=tags.filter(x=>x.includes(t));if(m.length>1){toast("Ταιριάζουν πολλά ενώτια: γράψε περισσότερα ψηφία");return}if(m.length===1)t=m[0]}
+  l.exits=l.exits||[];
+  if(t&&l.exits.some(x=>x!==editingExit&&x.tag===t)){toast("Αυτό το ζώο έχει ήδη καταχωρηθεί ως έξοδος");return}
+  const d={type:f.type.value,date:f.date.value,tag:t||null,weight:f.weight.value?+f.weight.value:null,note:f.note.value.trim()};if(!d.date)return;
+  if(editingExit)Object.assign(editingExit,d);else l.exits.push(Object.assign({id:uid()},d));
+  persist(l);close(f);render()};
+$("#btnDelExit").onclick=()=>{$("#mExit").classList.add("hide");confirmBox("Διαγραφή αυτής της καταχώρησης; Το ζώο θα μετράει ξανά στον στάβλο.",()=>{const l=lots.find(y=>y.id===cur);l.exits=(l.exits||[]).filter(x=>x!==editingExit);persist(l);render()})};
 
 /* TRACES INTRA certificates */
 const normIntra=s=>String(s).toUpperCase().replace(/\s+/g,"");
@@ -858,12 +963,12 @@ let editingLot=null;
 $("#btnNewLot").onclick=()=>{editingLot=null;$("#fLot").reset();$("#mLotTitle").textContent="Νέα παρτίδα";$("#btnDelLot").classList.add("hide");open("#mLot")};
 $("#btnEditLot").onclick=()=>{
   const l=lots.find(x=>x.id===cur);editingLot=l;const f=$("#fLot");
-  ["name","breed","sex","heads","supplier","notes"].forEach(k=>f[k].value=l[k]??"");f.feedBasis.value=l.feedBasis||"Νωπή";
+  ["name","breed","sex","heads","supplier","notes"].forEach(k=>f[k].value=l[k]??"");f.feedBasis.value=l.feedBasis||"Νωπή";f.closed.value=l.closed?"1":"";
   $("#mLotTitle").textContent="Επεξεργασία παρτίδας";$("#btnDelLot").classList.remove("hide");open("#mLot");
 };
 $("#fLot").onsubmit=e=>{
   e.preventDefault();const f=e.target;
-  const d={name:f.name.value.trim(),breed:f.breed.value.trim(),sex:f.sex.value,heads:f.heads.value?+f.heads.value:null,supplier:f.supplier.value.trim(),notes:f.notes.value.trim(),feedBasis:f.feedBasis.value};
+  const d={name:f.name.value.trim(),breed:f.breed.value.trim(),sex:f.sex.value,heads:f.heads.value?+f.heads.value:null,supplier:f.supplier.value.trim(),notes:f.notes.value.trim(),feedBasis:f.feedBasis.value,closed:f.closed.value==="1"};
   if(!d.name)return;
   let l;
   if(editingLot){l=Object.assign(editingLot,d);}
@@ -1022,7 +1127,7 @@ function xlsxBytes(){
     {h:"Τελ. ζύγιση",w:12,f:"d"},{h:"Τελ. βάρος kg",w:11,f:"n1"},{h:"Ημέρες από άφιξη",w:10,f:"n0"},
     {h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ τελ. διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
     {h:"Μέση κατανάλωση kg/ζώο/ημ",w:12,f:"n2"},{h:"Σύνολο ζωοτροφής kg/ζώο",w:12,f:"n0"},{h:"FCR σωρευτικό",w:10,f:"n2"},{h:"Αποδοτικότητα g/kg",w:11,f:"n0"},{h:"Βάση ζωοτροφής",w:10},{h:"Επιλεγμένο διάστημα",w:34},{h:"Ημέρες επιλ. διαστ.",w:10,f:"n0"},{h:"ΜΗΑΒ επιλ. διαστ. g/ημ",w:11,f:"n0"},{h:"Ενώτια (πλήθος)",w:9,f:"n0"},{h:"Σημειώσεις",w:24}],rows:[]};
-  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22}],rows:[]};
+  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"}],rows:[]};
   const det={name:"Ζυγίσεις",cols:[
     {h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:12,f:"d"},{h:"Τύπος",w:16},{h:"Ζώα",w:7,f:"n0"},{h:"Μικτό kg",w:10,f:"n0"},{h:"Απόβαρο kg",w:10,f:"n0"},{h:"Καθαρό kg",w:10,f:"n0"},{h:"Μέσο βάρος kg",w:11,f:"n1"},
     {h:"Ημέρες διαστ.",w:9,f:"n0"},{h:"Διαφορά kg",w:10,f:"n1"},{h:"ΜΗΑΒ διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
@@ -1032,13 +1137,15 @@ function xlsxBytes(){
       c.last&&c.last.date,c.last&&c.last.weight,c.dFarm,gr(c.adgFarm),gr(c.adgLast),gr(c.adgTot),r2(c.intakeAvg),c.feedHead!=null?Math.round(c.feedHead):null,r2(c.fcrCum),gr(c.effCum),l.feedBasis||"Νωπή",
       ...(()=>{const d=defaultRange(c),rg=Object.assign({},d,l.range||{});const r=rangeCalc(l,c,rg.from,rg.to);return r?[`${wLabel(c,r.A)} ${fd(r.A.date)} → ${wLabel(c,r.B)} ${fd(r.B.date)}`,r.days,gr(r.adg)]:[null,null,null]})(),
       (l.tags||[]).length||null,l.notes]);
-    (l.tags||[]).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};tg.rows.push([l.name,i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t)])});
+    (l.tags||[]).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);tg.rows.push([l.name,i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null])});
     let n=0;c.rows.forEach(r=>{const w=r.w;
       det.rows.push([l.name,w.date,w.type==="w"?`${++n}η ζύγιση`:TYPES[w.type],w.heads,w.gross,w.tare,w.net,w.weight,r.days,r1(r.gain),gr(r.adg),gr(r.adgArr),gr(r.adgLoad),r2(r.intake),r2(r.fcr),w.note]);});
   });
   const tr={name:"TRACES INTRA",cols:[{h:"Παρτίδα",w:22},{h:"Αριθμός INTRA",w:28},{h:"Ημ. έκδοσης",w:13,f:"d"},{h:"Ζώα",w:7,f:"n0"},{h:"Προέλευση",w:26},{h:"Μεταφορέας",w:20},{h:"Πινακίδα",w:12},{h:"Σημειώσεις",w:28}],rows:[]};
   ls.forEach(l=>(l.intra||[]).forEach(x=>tr.rows.push([l.name,x.no,x.date,x.heads,x.origin,x.carrier,x.plate,x.note])));
-  return XL.build([sum,det,tg,tr]);
+  const xs={name:"Απώλειες-Σφαγές",cols:[{h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:13,f:"d"},{h:"Τύπος",w:12},{h:"Ενώτιο",w:20},{h:"Βάρος kg",w:10,f:"n1"},{h:"Αιτία / σημείωση",w:32}],rows:[]};
+  ls.forEach(l=>(l.exits||[]).slice().sort((a,b)=>a.date<b.date?-1:1).forEach(e=>xs.rows.push([l.name,e.date,EXT[e.type],e.tag?fmtTag(e.tag):null,e.weight,e.note])));
+  return XL.build([sum,det,tg,tr,xs]);
 }
 const xlsxName=()=>"MHAB_vooeidon_"+new Date().toISOString().slice(0,10)+".xlsx";
 $("#btnXlsx").onclick=()=>{if(!lots.length){toast("Δεν υπάρχουν δεδομένα");return}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([xlsxBytes()],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=xlsxName();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις")};
