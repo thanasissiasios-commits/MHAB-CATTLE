@@ -179,6 +179,14 @@ svg text{fill:var(--mute);font-size:11px}
       <div id="exitList"></div>
     </div>
     <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <h4 class="sp" style="margin:0">💉 Θεραπείες &amp; εμβολιασμοί <span class="meta" id="healthCount" style="font-weight:400"></span></h4>
+        <button class="pri sm" id="btnAddHealth">+ Προσθήκη</button>
+      </div>
+      <div id="healthWarn"></div>
+      <div id="healthList"></div>
+    </div>
+    <div class="card">
       <h4>Καμπύλη βάρους</h4>
       <div id="chart"></div>
     </div>
@@ -320,9 +328,41 @@ svg text{fill:var(--mute);font-size:11px}
     <button id="anSl" style="padding:12px;border-color:var(--blue);color:var(--blue)">🔪 Πήγε στο σφαγείο</button>
     <button id="anExitEd" style="padding:12px">✎ Αλλαγή ημερομηνίας / στοιχείων εξόδου</button>
     <button id="anBack" style="padding:12px">↩ Επαναφορά στον στάβλο</button>
+    <button id="anHealth" style="padding:12px">💉 Θεραπείες &amp; εμβόλια</button>
     <button id="anEdit" style="padding:12px">✎ Επεξεργασία στοιχείων ζώου</button>
     <button data-close style="padding:12px">Κλείσιμο</button>
   </div>
+</div></div>
+
+<div class="modal hide" id="mAnH"><div class="box">
+  <h2 id="anHTitle" style="margin-bottom:8px;font-family:ui-monospace,monospace"></h2>
+  <div id="anHWd"></div>
+  <div id="anHList"></div>
+  <div class="row" style="margin-top:10px"><button class="pri" id="anHAddT">+ 💊 Θεραπεία</button><button class="pri" id="anHAddV">+ 💉 Εμβόλιο</button><span class="sp"></span><button data-close>Κλείσιμο</button></div>
+</div></div>
+
+<div class="modal hide" id="mHealth"><div class="box">
+  <h2 id="mHealthTitle" style="margin-bottom:12px">Θεραπεία / εμβολιασμός</h2>
+  <form id="fHealth">
+    <div class="grid">
+      <div><label>Είδος *</label><select name="kind"><option value="treat">💊 Θεραπεία</option><option value="vacc">💉 Εμβολιασμός</option></select></div>
+      <div><label>Ημερομηνία (τελευταίας χορήγησης) *</label><input name="date" type="date" required></div>
+      <div style="grid-column:1/-1"><label id="hProdLbl">Σκεύασμα / φάρμακο *</label><input name="product" required></div>
+      <div><label>Δόση / οδός</label><input name="dose" placeholder="π.χ. 10 ml IM"></div>
+      <div><label id="hReasonLbl">Αιτία / διάγνωση</label><input name="reason"></div>
+      <div><label>Χρόνος αναμονής κρέατος (ημέρες)</label><input name="wd" type="number" min="0" step="1" inputmode="numeric" placeholder="0 αν δεν έχει"></div>
+      <div><label>Αφορά</label><select name="scope"><option value="all">Όλη την παρτίδα</option><option value="sel">Συγκεκριμένα ζώα</option></select></div>
+      <div id="hTagsBox" style="grid-column:1/-1"><label>Ενώτια (ένα ανά γραμμή· αρκούν τα τελευταία ψηφία)</label><textarea name="tags" rows="3" style="font-family:ui-monospace,monospace"></textarea></div>
+      <div style="grid-column:1/-1"><label>Σημείωση (παρτίδα φαρμάκου, κτηνίατρος κ.λπ.)</label><input name="note"></div>
+    </div>
+    <p class="note" id="hHint"></p>
+    <div class="row" style="margin-top:10px">
+      <button type="button" class="danger hide" id="btnDelH">Διαγραφή</button>
+      <span class="sp"></span>
+      <button type="button" data-close>Άκυρο</button>
+      <button class="pri" type="submit">Αποθήκευση</button>
+    </div>
+  </form>
 </div></div>
 
 <div class="modal hide" id="mExit"><div class="box">
@@ -506,6 +546,7 @@ function renderLot(){
   renderTags(l);
   renderIntra(l);
   renderExits(l);
+  renderHealth(l);
   const t=$("#tbl");
   if(!c.rows.length){t.innerHTML='<tr><td class="empty" colspan="11">Πρόσθεσε πρώτα τη ζύγιση φόρτωσης στη Γαλλία.</td></tr>';}
   else{
@@ -609,7 +650,7 @@ function renderTags(l){
   const shown=q?tags.filter(t=>t.includes(q)):tags;
   $("#tagList").innerHTML=!tags.length?'<p class="note">Δεν έχουν καταχωρηθεί ενώτια. Πάτα «+ Προσθήκη».</p>':
     !shown.length?'<p class="note">Δεν βρέθηκε.</p>':
-    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}" data-edtag="${esc(t)}" style="cursor:pointer${dset.has(t)?";border-color:var(--warn)":""}">${dset.has(t)?"⚠ ":""}${exitOf(l,t)?`${EXI[exitOf(l,t).type]} <s>${esc(fmtTag(t))}</s> <span class="meta" style="font-family:system-ui,sans-serif">${EXT[exitOf(l,t).type]} ${fd(exitOf(l,t).date)}</span>`:esc(fmtTag(t))}${infoTxt((l.tagInfo||{})[t])?` <span class="meta" style="font-family:system-ui,sans-serif">${infoTxt(l.tagInfo[t])}</span>`:""}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
+    `<div class="chips">${shown.map(t=>`<span class="chip${q?" hit":""}" data-edtag="${esc(t)}" style="cursor:pointer${dset.has(t)?";border-color:var(--warn)":""}">${dset.has(t)?"⚠ ":""}${exitOf(l,t)?`${EXI[exitOf(l,t).type]} <s>${esc(fmtTag(t))}</s> <span class="meta" style="font-family:system-ui,sans-serif">${EXT[exitOf(l,t).type]} ${fd(exitOf(l,t).date)}</span>`:esc(fmtTag(t))}${infoTxt((l.tagInfo||{})[t])?` <span class="meta" style="font-family:system-ui,sans-serif">${infoTxt(l.tagInfo[t])}</span>`:""}${!exitOf(l,t)&&activeWd(l,t,todayIso())?` <span title="Σε χρόνο αναμονής" style="color:var(--warn);font-family:system-ui,sans-serif;font-size:12px">⏳ έως ${fd(activeWd(l,t,todayIso()).until)}</span>`:""}<button data-rmtag="${esc(t)}" title="Διαγραφή">×</button></span>`).join("")}</div>`;
 }
 try{$("#tagSort").value=localStorage.getItem("adg_tagsort")||"entry"}catch(e){}
 $("#tagSort").addEventListener("change",()=>{try{localStorage.setItem("adg_tagsort",$("#tagSort").value)}catch(e){}const l=lots.find(x=>x.id===cur);if(l)renderTags(l)});
@@ -618,15 +659,16 @@ async function saveX(name,bytes){
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις");
 }
 $("#btnTagsXlsx").onclick=()=>{const l=lots.find(x=>x.id===cur);if(!l||!(l.tags||[]).length){toast("Δεν υπάρχουν ενώτια");return}
-  const sh={name:"Ενώτια",cols:[{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"}],rows:[]};
-  sortedTags(l).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);sh.rows.push([i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null])});
+  const sh={name:"Ενώτια",cols:[{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"},{h:"Σε αναμονή έως",w:14,f:"d"},{h:"Θεραπείες/εμβόλια",w:10,f:"n0"}],rows:[]};
+  sortedTags(l).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);sh.rows.push([i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null,(!e&&activeWd(l,t,todayIso())||{}).until||null,healthOf(l,t).length||null])});
   saveX("Enotia_"+(stripAcc(l.name).replace(/[Α-Ω]/g,c=>({"Α":"A","Β":"V","Γ":"G","Δ":"D","Ε":"E","Ζ":"Z","Η":"I","Θ":"TH","Ι":"I","Κ":"K","Λ":"L","Μ":"M","Ν":"N","Ξ":"X","Ο":"O","Π":"P","Ρ":"R","Σ":"S","Τ":"T","Υ":"Y","Φ":"F","Χ":"CH","Ψ":"PS","Ω":"O"}[c]||"")).replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,40)||"partida")+"_"+new Date().toISOString().slice(0,10)+".xlsx",XL.build([sh]))};
 function infoBox(html){$("#infoMsg").innerHTML=html;open("#mInfo")}
 function editTagInfo(t){const l=lots.find(x=>x.id===cur),i=(l.tagInfo||{})[t]||{};window._edTag=t;
   $("#tagInput").value=[t,i.birth?fd(i.birth):"-",i.sex||"",i.breed||"",i.arr?fd(i.arr):""].join(" | ");$("#tagPrev").textContent="";open("#mTags")}
 let animalTag=null;
 function openAnimal(t){animalTag=t;const l=lots.find(x=>x.id===cur),i=(l.tagInfo||{})[t],e=exitOf(l,t);
-  $("#anTitle").textContent=fmtTag(t);$("#anInfo").innerHTML=(infoTxt(i)||"Χωρίς άλλα στοιχεία")+(e?`<br><b>${EXI[e.type]} ${EXT[e.type]} στις ${fd(e.date)}</b>${e.note?" · "+esc(e.note):""}`:"<br>Στον στάβλο");
+  $("#anTitle").textContent=fmtTag(t);$("#anInfo").innerHTML=(infoTxt(i)||"Χωρίς άλλα στοιχεία")+(e?`<br><b>${EXI[e.type]} ${EXT[e.type]} στις ${fd(e.date)}</b>${e.note?" · "+esc(e.note):""}`:"<br>Στον στάβλο")+(()=>{const w=!e&&activeWd(l,t,todayIso());return w?`<br><b style="color:var(--warn)">⏳ Σε χρόνο αναμονής έως ${fd(w.until)} (${esc(w.h.product)})</b>`:""})();
+  $("#anHealth").textContent=`💉 Θεραπείες & εμβόλια (${healthOf(l,t).length})`;
   $("#anDead").classList.toggle("hide",!!e);$("#anSl").classList.toggle("hide",!!e);$("#anExitEd").classList.toggle("hide",!e);$("#anBack").classList.toggle("hide",!e);open("#mAnimal")}
 const anClose=()=>$("#mAnimal").classList.add("hide");
 $("#anDead").onclick=()=>{anClose();openExit(null,animalTag,"dead")};
@@ -682,9 +724,62 @@ $("#fExit").onsubmit=ev=>{ev.preventDefault();const f=ev.target,l=lots.find(y=>y
   l.exits=l.exits||[];
   if(t&&l.exits.some(x=>x!==editingExit&&x.tag===t)){toast("Αυτό το ζώο έχει ήδη καταχωρηθεί ως έξοδος");return}
   const d={type:f.type.value,date:f.date.value,tag:t||null,weight:f.weight.value?+f.weight.value:null,note:f.note.value.trim()};if(!d.date)return;
-  if(editingExit)Object.assign(editingExit,d);else l.exits.push(Object.assign({id:uid()},d));
-  persist(l);close(f);render()};
+  const save=()=>{if(editingExit)Object.assign(editingExit,d);else l.exits.push(Object.assign({id:uid()},d));persist(l);$("#mExit").classList.add("hide");render()};
+  const w=d.type==="slaughter"?activeWd(l,d.tag,d.date):null;
+  if(w){$("#mExit").classList.add("hide");confirmBox(`⚠ ΧΡΟΝΟΣ ΑΝΑΜΟΝΗΣ: ${d.tag?"το ζώο "+fmtTag(d.tag):"η παρτίδα"} έχει λάβει «${w.h.product}» στις ${fd(w.h.date)} με αναμονή ${w.h.wd} ημερών, που λήγει ${fd(w.until)}. Η σφαγή στις ${fd(d.date)} είναι πριν από τη λήξη. Να καταχωρηθεί παρόλα αυτά;`,save);$("#cOk").textContent="Καταχώρηση παρόλα αυτά";return}
+  save()};
 $("#btnDelExit").onclick=()=>{$("#mExit").classList.add("hide");confirmBox("Διαγραφή αυτής της καταχώρησης; Το ζώο θα μετράει ξανά στον στάβλο.",()=>{const l=lots.find(y=>y.id===cur);l.exits=(l.exits||[]).filter(x=>x!==editingExit);persist(l);render()})};
+
+/* treatments, withdrawal periods and vaccinations */
+const HK={treat:"Θεραπεία",vacc:"Εμβολιασμός"},HI={treat:"💊",vacc:"💉"};
+const addDays=(iso,n)=>{const d=new Date(iso+"T00:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)};
+const todayIso=()=>new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+const wdEnd=h=>h.wd>0?addDays(h.date,h.wd):null;
+const hApplies=(h,t)=>!h.tags||!h.tags.length||(!!t&&h.tags.includes(t));
+function healthOf(l,t){return (l.health||[]).filter(h=>hApplies(h,t)).sort((a,b)=>a.date<b.date?1:-1)}
+/* latest withdrawal still running on the given day, for one animal (or for whole-lot records when no tag) */
+function activeWd(l,t,on){let best=null;(l.health||[]).forEach(h=>{if(!(t?hApplies(h,t):(!h.tags||!h.tags.length)))return;const e=wdEnd(h);if(e&&h.date<=on&&e>on&&(!best||e>best.until))best={until:e,h}});return best}
+const daysLeft=(until,on)=>Math.round((new Date(until)-new Date(on))/86400000);
+function healthRow(l,h){const e=wdEnd(h),on=todayIso(),act=e&&e>on;
+  return`<div class="wc"><div class="top"><span class="tag ${h.kind==="vacc"?"load":""}">${HI[h.kind]} ${HK[h.kind]}</span><span class="meta">${fd(h.date)}</span><b>${esc(h.product)}</b><span class="sp"></span><button class="sm" data-edh="${esc(h.id)}">✎</button></div>
+    <div class="meta">${[h.dose,h.reason,h.tags&&h.tags.length?(h.tags.length===1?fmtTag(h.tags[0]):`${h.tags.length} ζώα: `+h.tags.slice(0,4).map(fmtTag).join(", ")+(h.tags.length>4?"…":"")):"όλη η παρτίδα",h.note].filter(Boolean).map(esc).join(" · ")}</div>
+    ${e?`<div class="meta" style="${act?"color:var(--warn);font-weight:600":""}">⏳ Αναμονή ${h.wd} ημ. · ${act?`έως ${fd(e)} (ακόμα ${daysLeft(e,on)} ημ.)`:`έληξε ${fd(e)}`}</div>`:""}</div>`}
+function renderHealth(l){
+  const a=(l.health||[]).slice().sort((x,y)=>x.date<y.date?1:-1),on=todayIso();
+  const inWd=(l.tags||[]).filter(t=>!exitOf(l,t)&&activeWd(l,t,on)),lotWd=activeWd(l,null,on);
+  $("#healthCount").textContent=a.length?`· ${a.length}`:"";
+  $("#healthWarn").innerHTML=(inWd.length||lotWd)?`<div style="background:var(--warn2);color:var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px">⏳ <b>Σε χρόνο αναμονής:</b> ${lotWd?`όλη η παρτίδα έως ${fd(lotWd.until)} (${esc(lotWd.h.product)})`+(inWd.length?" · ":""):""}${inWd.length&&!(lotWd&&inWd.every(t=>activeWd(l,t,on).h===lotWd.h))?`${inWd.length} ζώα — `+inWd.slice(0,6).map(t=>`${esc(fmtTag(t))} έως ${fd(activeWd(l,t,on).until)}`).join(", ")+(inWd.length>6?"…":""):""}<br>Δεν πρέπει να πάνε στο σφαγείο πριν λήξει.</div>`:"";
+  $("#healthList").innerHTML=!a.length?'<p class="note">Καμία θεραπεία ή εμβολιασμός. Πάτα «+ Προσθήκη», ή πάτα πάνω σε ένα ενώτιο για καταχώρηση σε συγκεκριμένο ζώο.</p>':a.map(h=>healthRow(l,h)).join("");
+}
+let editingH=null;
+function hUi(){const f=$("#fHealth"),v=f.kind.value==="vacc";$("#hProdLbl").textContent=v?"Εμβόλιο *":"Σκεύασμα / φάρμακο *";$("#hReasonLbl").textContent=v?"Νόσος / σχήμα (π.χ. 1η δόση)":"Αιτία / διάγνωση";
+  $("#hTagsBox").classList.toggle("hide",f.scope.value!=="sel");
+  const d=f.date.value,w=+f.wd.value;$("#hHint").textContent=d&&w>0?`⏳ Λήξη αναμονής: ${fd(addDays(d,w))} — από ${fd(addDays(d,w))} και μετά επιτρέπεται η σφαγή.`:""}
+["input","change"].forEach(ev=>$("#fHealth").addEventListener(ev,hUi));
+function openHealth(h,preTag,preKind){editingH=h||null;const f=$("#fHealth");f.reset();
+  if(h){f.kind.value=h.kind;f.date.value=h.date;f.product.value=h.product||"";f.dose.value=h.dose||"";f.reason.value=h.reason||"";f.wd.value=h.wd??"";f.note.value=h.note||"";f.scope.value=h.tags&&h.tags.length?"sel":"all";f.tags.value=(h.tags||[]).join("\n");$("#btnDelH").classList.remove("hide");$("#mHealthTitle").textContent="Επεξεργασία καταχώρησης"}
+  else{f.date.value=todayIso();if(preKind)f.kind.value=preKind;if(preTag){f.scope.value="sel";f.tags.value=preTag}$("#btnDelH").classList.add("hide");$("#mHealthTitle").textContent="Θεραπεία / εμβολιασμός"}
+  hUi();open("#mHealth")}
+$("#btnAddHealth").onclick=()=>openHealth(null);
+function hClick(e){const b=e.target.closest("[data-edh]");if(!b)return;const l=lots.find(y=>y.id===cur);$("#mAnH").classList.add("hide");openHealth((l.health||[]).find(x=>x.id===b.dataset.edh))}
+$("#healthList").addEventListener("click",hClick);$("#anHList").addEventListener("click",hClick);
+$("#fHealth").onsubmit=ev=>{ev.preventDefault();const f=ev.target,l=lots.find(y=>y.id===cur);let tags=null;
+  if(f.scope.value==="sel"){const all=l.tags||[],bad=[],amb=[];tags=[];
+    f.tags.value.split(/[\n,;]+/).map(normTag).filter(Boolean).forEach(t=>{let m=all.filter(x=>x===t);if(!m.length)m=all.filter(x=>x.endsWith(t));if(m.length===1){if(!tags.includes(m[0]))tags.push(m[0])}else if(m.length>1)amb.push(t);else bad.push(t)});
+    if(amb.length){toast("Ταιριάζουν πολλά ενώτια: "+amb.join(", ")+" — γράψε περισσότερα ψηφία");return}
+    if(bad.length){toast("Δεν υπάρχουν στα ενώτια της παρτίδας: "+bad.join(", "));return}
+    if(!tags.length){toast("Γράψε τουλάχιστον ένα ενώτιο ή διάλεξε «Όλη η παρτίδα»");return}}
+  const d={kind:f.kind.value,date:f.date.value,product:f.product.value.trim(),dose:f.dose.value.trim(),reason:f.reason.value.trim(),wd:f.wd.value!==""?Math.max(0,Math.round(+f.wd.value)):null,tags,note:f.note.value.trim()};
+  if(!d.date||!d.product)return;l.health=l.health||[];
+  if(editingH)Object.assign(editingH,d);else l.health.push(Object.assign({id:uid()},d));
+  persist(l);close(f);render()};
+$("#btnDelH").onclick=()=>{$("#mHealth").classList.add("hide");confirmBox(`Διαγραφή της καταχώρησης «${editingH.product}» (${fd(editingH.date)});`,()=>{const l=lots.find(y=>y.id===cur);l.health=(l.health||[]).filter(x=>x!==editingH);persist(l);render()})};
+function openAnH(t){const l=lots.find(x=>x.id===cur),a=healthOf(l,t),w=activeWd(l,t,todayIso());
+  $("#anHTitle").textContent="💉 "+fmtTag(t);$("#anHWd").innerHTML=w?`<div style="background:var(--warn2);color:var(--warn);border-radius:8px;padding:8px 10px;margin-bottom:8px">⏳ <b>Σε χρόνο αναμονής έως ${fd(w.until)}</b> (${esc(w.h.product)}, ακόμα ${daysLeft(w.until,todayIso())} ημ.)</div>`:"";
+  $("#anHList").innerHTML=a.length?a.map(h=>healthRow(l,h)).join(""):'<p class="note">Καμία θεραπεία ή εμβολιασμός για αυτό το ζώο.</p>';open("#mAnH")}
+$("#anHealth").onclick=()=>{anClose();openAnH(animalTag)};
+$("#anHAddT").onclick=()=>{$("#mAnH").classList.add("hide");openHealth(null,animalTag,"treat")};
+$("#anHAddV").onclick=()=>{$("#mAnH").classList.add("hide");openHealth(null,animalTag,"vacc")};
 
 /* TRACES INTRA certificates */
 const normIntra=s=>String(s).toUpperCase().replace(/\s+/g,"");
@@ -1127,7 +1222,7 @@ function xlsxBytes(){
     {h:"Τελ. ζύγιση",w:12,f:"d"},{h:"Τελ. βάρος kg",w:11,f:"n1"},{h:"Ημέρες από άφιξη",w:10,f:"n0"},
     {h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ τελ. διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
     {h:"Μέση κατανάλωση kg/ζώο/ημ",w:12,f:"n2"},{h:"Σύνολο ζωοτροφής kg/ζώο",w:12,f:"n0"},{h:"FCR σωρευτικό",w:10,f:"n2"},{h:"Αποδοτικότητα g/kg",w:11,f:"n0"},{h:"Βάση ζωοτροφής",w:10},{h:"Επιλεγμένο διάστημα",w:34},{h:"Ημέρες επιλ. διαστ.",w:10,f:"n0"},{h:"ΜΗΑΒ επιλ. διαστ. g/ημ",w:11,f:"n0"},{h:"Ενώτια (πλήθος)",w:9,f:"n0"},{h:"Σημειώσεις",w:24}],rows:[]};
-  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"}],rows:[]};
+  const tg={name:"Ενώτια",cols:[{h:"Παρτίδα",w:22},{h:"Α/Α",w:6,f:"n0"},{h:"Αριθμός ενωτίου",w:22},{h:"Ημ. γέννησης",w:13,f:"d"},{h:"Ηλικία (μήνες)",w:10,f:"n0"},{h:"Φύλο",w:11},{h:"Φυλή",w:18},{h:"Ημ. άφιξης Ελλάδα",w:14,f:"d"},{h:"Υπάρχει και σε παρτίδα",w:22},{h:"Κατάσταση",w:13},{h:"Ημ. εξόδου",w:13,f:"d"},{h:"Σε αναμονή έως",w:14,f:"d"},{h:"Θεραπείες/εμβόλια",w:10,f:"n0"}],rows:[]};
   const det={name:"Ζυγίσεις",cols:[
     {h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:12,f:"d"},{h:"Τύπος",w:16},{h:"Ζώα",w:7,f:"n0"},{h:"Μικτό kg",w:10,f:"n0"},{h:"Απόβαρο kg",w:10,f:"n0"},{h:"Καθαρό kg",w:10,f:"n0"},{h:"Μέσο βάρος kg",w:11,f:"n1"},
     {h:"Ημέρες διαστ.",w:9,f:"n0"},{h:"Διαφορά kg",w:10,f:"n1"},{h:"ΜΗΑΒ διαστ. g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από άφιξη g/ημ",w:11,f:"n0"},{h:"ΜΗΑΒ από φόρτωση g/ημ",w:11,f:"n0"},
@@ -1137,7 +1232,7 @@ function xlsxBytes(){
       c.last&&c.last.date,c.last&&c.last.weight,c.dFarm,gr(c.adgFarm),gr(c.adgLast),gr(c.adgTot),r2(c.intakeAvg),c.feedHead!=null?Math.round(c.feedHead):null,r2(c.fcrCum),gr(c.effCum),l.feedBasis||"Νωπή",
       ...(()=>{const d=defaultRange(c),rg=Object.assign({},d,l.range||{});const r=rangeCalc(l,c,rg.from,rg.to);return r?[`${wLabel(c,r.A)} ${fd(r.A.date)} → ${wLabel(c,r.B)} ${fd(r.B.date)}`,r.days,gr(r.adg)]:[null,null,null]})(),
       (l.tags||[]).length||null,l.notes]);
-    (l.tags||[]).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);tg.rows.push([l.name,i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null])});
+    (l.tags||[]).forEach((t,i)=>{const x=(l.tagInfo||{})[t]||{};const e=exitOf(l,t);tg.rows.push([l.name,i+1,fmtTag(t),x.birth,ageMonths(x.birth),x.sex,x.breed,x.arr,otherLotOf(l,t),e?EXT[e.type]:"Στον στάβλο",e?e.date:null,(!e&&activeWd(l,t,todayIso())||{}).until||null,healthOf(l,t).length||null])});
     let n=0;c.rows.forEach(r=>{const w=r.w;
       det.rows.push([l.name,w.date,w.type==="w"?`${++n}η ζύγιση`:TYPES[w.type],w.heads,w.gross,w.tare,w.net,w.weight,r.days,r1(r.gain),gr(r.adg),gr(r.adgArr),gr(r.adgLoad),r2(r.intake),r2(r.fcr),w.note]);});
   });
@@ -1145,7 +1240,9 @@ function xlsxBytes(){
   ls.forEach(l=>(l.intra||[]).forEach(x=>tr.rows.push([l.name,x.no,x.date,x.heads,x.origin,x.carrier,x.plate,x.note])));
   const xs={name:"Απώλειες-Σφαγές",cols:[{h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:13,f:"d"},{h:"Τύπος",w:12},{h:"Ενώτιο",w:20},{h:"Βάρος kg",w:10,f:"n1"},{h:"Αιτία / σημείωση",w:32}],rows:[]};
   ls.forEach(l=>(l.exits||[]).slice().sort((a,b)=>a.date<b.date?-1:1).forEach(e=>xs.rows.push([l.name,e.date,EXT[e.type],e.tag?fmtTag(e.tag):null,e.weight,e.note])));
-  return XL.build([sum,det,tg,tr,xs]);
+  const hs={name:"Θεραπείες-Εμβόλια",cols:[{h:"Παρτίδα",w:22},{h:"Ημερομηνία",w:13,f:"d"},{h:"Είδος",w:14},{h:"Σκεύασμα / εμβόλιο",w:26},{h:"Δόση",w:14},{h:"Αιτία / νόσος",w:22},{h:"Αναμονή (ημ.)",w:10,f:"n0"},{h:"Λήξη αναμονής",w:13,f:"d"},{h:"Ζώα",w:36},{h:"Πλήθος ζώων",w:9,f:"n0"},{h:"Σημείωση",w:28}],rows:[]};
+  ls.forEach(l=>(l.health||[]).slice().sort((a,b)=>a.date<b.date?-1:1).forEach(h=>hs.rows.push([l.name,h.date,HK[h.kind],h.product,h.dose,h.reason,h.wd,wdEnd(h),h.tags&&h.tags.length?h.tags.map(fmtTag).join(", "):"Όλη η παρτίδα",h.tags&&h.tags.length?h.tags.length:(headsNow(l)||null),h.note])));
+  return XL.build([sum,det,tg,tr,xs,hs]);
 }
 const xlsxName=()=>"MHAB_vooeidon_"+new Date().toISOString().slice(0,10)+".xlsx";
 $("#btnXlsx").onclick=()=>{if(!lots.length){toast("Δεν υπάρχουν δεδομένα");return}const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([xlsxBytes()],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=xlsxName();document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast("Το αρχείο Excel αποθηκεύτηκε στις Λήψεις")};
